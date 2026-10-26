@@ -203,14 +203,13 @@
   function botCard(b) {
     const card = el("div", "card");
     const row = el("div", "bot-card");
+    const av = el("span", "bot-av");
     const img = document.createElement("img");
     img.src = "/static/mascot.png";
     img.alt = "";
-    row.appendChild(img);
-    const av = el("span", "bot-av");
     av.appendChild(img);
     if (b.template === "coordinator") av.appendChild(el("span", "crown", "\u2605"));
-    row.replaceChild(av, img);
+    row.appendChild(av);
     const txt = el("div");
     txt.appendChild(el("div", "n", b.name));
     txt.appendChild(el("div", "d", b.template === "coordinator" ? "coordinates all bots" : (b.template ? "pins the " + b.template + " playbook" : "custom persona")));
