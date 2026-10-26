@@ -601,30 +601,17 @@ def remember_facts(chat_id, text):
         print(f"[bot] memory save failed: {e}", flush=True)
 
 def handle_group_update(msg, chat, edited):
-    """Groups and supergroups: store text (idempotent, edits in place) and answer /search and /recap."""
+    """Groups and supergroups go to app/tggroups.py. Private chats never reach this path."""
     from . import tggroups
-    try:
-        tggroups.store_group_message(msg, edited=edited)
-    except Exception as e:
-        print(f"[bot] group store failed: {e}", flush=True)
-    text = (msg.get("text") or "").strip()
-    if edited or not text.startswith("/"):
-        return
-    cmd, _, arg = text.partition(" ")
-    cmd = cmd.split("@")[0].lower()
-    if cmd not in ("/search", "/recap"):
-        return
+    owner = leadbrain.OWNER_CHAT_ID
     token = budget.bind(chat["id"])
     try:
-        if cmd == "/search":
-            tggroups.handle_search(chat["id"], chat["id"], arg, send)
-        else:
-            tggroups.handle_recap(chat["id"], chat["id"], arg, send)
+        tggroups.handle_group_update(msg, edited, send, api, owner_id=owner)
     except budget.BudgetExceeded as e:
         try: send(chat["id"], str(e))
         except Exception: pass
     except Exception as e:
-        print(f"[bot] group command error: {e}", flush=True)
+        print(f"[bot] group update error: {e}", flush=True)
     finally:
         budget.unbind(token)
 
@@ -638,6 +625,11 @@ def handle_update(u):
         return handle_group_update(msg, chat, edited)
     if chat.get("type") != "private": return
     if edited: return  # private edits were ignored before; keep it that way
+    from . import tggroups as _tg
+    if (msg.get("text") or "").strip().startswith(("/help", "/deletemydata")):
+        if _tg.handle_private_command(chat["id"], (msg.get("from") or {}).get("id"), msg["text"].strip(),
+                                      lambda cid, t: send(cid, t)):
+            return
     chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
     if not text and not msg.get("photo"): return
     token = budget.bind(chat_id)

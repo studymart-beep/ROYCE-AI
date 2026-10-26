@@ -173,6 +173,15 @@ def delete_user_messages(group_id, sender_id, path=None):
         con.close()
 
 
+def groups_with_sender(sender_id, path=None):
+    con = _connect(path)
+    try:
+        rows = con.execute("SELECT DISTINCT group_id FROM group_messages WHERE sender_id=?", (sender_id,)).fetchall()
+        return [r[0] for r in rows]
+    finally:
+        con.close()
+
+
 def count(group_id=None, path=None):
     con = _connect(path)
     try:
