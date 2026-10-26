@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   var TOKEN_KEY = "royce.m.token";
-  var API = "/api/ws";
+  var API = (window.ROYCE_API_BASE || "") + "/api/ws";
   var state = { tab: "chats", convId: null, token: localStorage.getItem(TOKEN_KEY) || "", pollTimer: null, busy: false };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -261,7 +261,7 @@
     var card = $("providerCard");
     card.textContent = "";
     try {
-      var ready = await fetch("/readyz", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return null; });
+      var ready = await fetch((window.ROYCE_API_BASE || "") + "/readyz", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return null; });
       if (ready && ready.providers) {
         Object.keys(ready.providers).forEach(function (k) {
           var p = ready.providers[k];

@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from . import db
@@ -68,6 +68,14 @@ def readyz():
 def workspace_page(): return FileResponse(os.path.join(STATIC, "workspace.html"))
 @app.get("/m")
 def mobile_page(): return FileResponse(os.path.join(STATIC, "mobile.html"), headers={"Cache-Control": "no-cache"})
+@app.get("/static/config.js")
+def static_config():
+    # optional runtime override for a separate static host; empty file = same-origin default
+    path = os.path.join(STATIC, "config.js")
+    if os.path.isfile(path):
+        return FileResponse(path, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+    return Response("/* no api base override: same-origin */\n", media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache"})
 @app.get("/offline")
 def offline_page(): return FileResponse(os.path.join(STATIC, "offline.html"))
 @app.get("/sw.js")
