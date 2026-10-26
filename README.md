@@ -103,3 +103,27 @@ Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-
 - Coding playbooks: skills/coding/codebase.md and debugging.md, added to the bot prompt for code and debug questions.
 - Tests: `.venv/bin/python -m pytest -q tests`.
 
+## Royce AI workspace (web app, installable on Windows)
+
+The workspace is a single-page web app served by the same FastAPI server. It is not an Electron or native
+desktop build. In Chrome or Edge on Windows you can install it as an app (see below), which gives it its own
+window and launcher icon. No native .exe is built or shipped.
+
+Set an owner token in .env (any long random string). The workspace refuses its APIs without it, so the public
+tunnel never exposes chat, memory or approvals:
+
+WORKSPACE_TOKEN=<a long random string you choose>
+
+Run the backend with the existing uvicorn command (see Run above). Open the workspace at /workspace on your
+server (or your tunnel URL plus /workspace), paste the same token in Settings, and the status bar shows whether
+a provider is ready.
+
+Install as a Windows app:
+1. Open the workspace URL in Chrome or Edge.
+2. Chrome: menu (three dots), then Save and share, then Install page as app. Edge: menu (three dots), then Apps, then Install this site as an app.
+3. Click Install. Royce AI opens in its own window and appears in the Start menu.
+The install needs the server reachable at that URL. The service worker caches only the static shell, never owner data.
+
+Local development: run the server, edit app/static/workspace.html, workspace.css or workspace.js, and refresh.
+The owner token is kept only for the current browser tab (session storage).
+

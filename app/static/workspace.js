@@ -510,5 +510,11 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  function registerShell() {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/static/sw.js", { scope: "/" }).catch(() => { /* install is optional */ });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => { init(); registerShell(); });
 })();

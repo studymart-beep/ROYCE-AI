@@ -53,3 +53,9 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 - A3 /health: states not_configured, validated, unavailable (429, timeout, outage: not proven invalid), invalid (401/403). Cheap GET of the model list, cached 5 minutes, keys never printed. Status: implemented, tested with mocked providers. No live check was run against the real providers in tests.
 - B chat planning: explicit multi-step asks only (sequencing words or a numbered list). Plan validated, approval pauses the task, /deny stops it, a failed step blocks later steps, interrupted steps are never repeated. Status: implemented, tested. Limitation: the followup engine is marked consequential, but no outbound send executor exists yet, so an approved followup produces a draft only.
 - C UX: per-step progress, plain-text failure summary, SIGTERM stops between steps, restart marks interrupted tasks failed. Status: implemented. Background jobs (jobs.py) are not part of the planner.
+
+## Phase 4: desktop workspace (status)
+
+- Desktop interface: implemented as a browser workspace at /workspace (sidebar with conversations, real chat through /api/ws/chat, planner task panel with polling, approvals with approve/reject, tasks, memory with forget, connections and provider/budget status, settings). Runs on the existing FastAPI server and shares the bot's modules (chatplan, approvals, memory, budget, audit). Gated by WORKSPACE_TOKEN. Status: implemented, tested at the API level.
+- Installable app: implemented as a PWA (manifest plus service worker that caches only the static shell). Installed from Chrome or Edge on Windows via Install app.
+- Native Windows executable: not built. No Electron or packaged desktop app. The desktop experience is the installed PWA window.
