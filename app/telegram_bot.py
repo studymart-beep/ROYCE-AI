@@ -5,7 +5,7 @@ from . import db, collectors, workstore, tasks
 from . import leadbrain
 from . import skills
 from .style import VOICE_RULES, sanitize
-from .agent import budget, memory, approvals, permissions
+from .agent import budget, memory, approvals, permissions, jobs, audit
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -606,6 +606,7 @@ def _handle_update_bound(u, msg, chat, chat_id, text):
         elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
         elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
         elif text == "/skills": handle_skills(chat_id)
+        elif text == "/health": send(chat_id, jobs.format_status())
         elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
         elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
@@ -623,6 +624,8 @@ def main():
     get_env()
     me = api("getMe")
     print(f"[bot] connected as @{me['result']['username']}", flush=True)
+    jobs.start()
+    audit.record("bot", "bot_started", "telegram", "ok")
     offset = None
     last_check = 0
     while True:
