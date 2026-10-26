@@ -6,8 +6,10 @@ def _key(pid):
     return os.environ.get(PROVIDERS[pid]["key_env"], "")
 
 def _post_chat(pid, messages, temperature=0.8, timeout=20):
+    from .agent import router
     p = PROVIDERS[pid]
-    body = json.dumps({"model": p["model"], "messages": messages,
+    model = router.active_model(pid)  # the cascade model the router is trying (gemini), else the provider default
+    body = json.dumps({"model": model, "messages": messages,
                        "temperature": temperature, "max_tokens": 2500}).encode()
     req = urllib.request.Request(p["base"] + "chat/completions", data=body,
         headers={"Authorization": "Bearer " + _key(pid), "Content-Type": "application/json", "User-Agent": "RoyceAI/1.0"})
