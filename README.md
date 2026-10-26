@@ -1,6 +1,6 @@
 # Royce AI
 
-In-house AI for Royce Marketing Agency: ad scripts, CRM, campaign reporting, and a Telegram bot that talks like a colleague.
+In-house AI for Royce Marketing Agency: ad scripts, CRM, campaign reporting. AI chat lives in the desktop app and the PWA (/workspace and /m). Telegram is ops and alerts only: group moderation, recaps, welcomes, owner approvals and group sends.
 
 ## Run
 
@@ -38,11 +38,17 @@ API routes:
 
 Presets: last_7d (default), last_14d, last_30d, yesterday, today, this_month (TikTok only supports explicit dates; the collector maps these).
 
-Telegram: ask for a report or campaign performance, and the bot pulls the rows from every configured collector, then has the LLM write a client-ready summary from those real numbers. If nothing is connected, it tells you which token to add.
+Ask for a report or campaign performance in the desktop app or PWA: the workspace pulls the rows from every configured collector, then has the LLM write a client-ready summary from those real numbers. If nothing is connected, it tells you which token to add.
 
-## Mini app (v5, view-first)
+## Telegram command list (ops only)
 
-The mini app is read-only: Generated work (every ad package, newest first, stored in work.json), CRM leads, the campaign report, and connectors. You do the work by telling Royce in the chat. Each generated package is recorded in work.json via GET /api/work.
+Owner private chat with the bot: /start (this list), /leads, /addlead Name | Business | Contact, /report, /followup <lead name or id>, /tasks, /skills, /health, /approve <id>, /deny <id>, tell group <name>: <text>, post channel <name>: <text> (queued, approved with /approve), /help, /deletemydata yes.
+Anything else in private (free text, /script, /doctor, /content, /image, /voice) is not handled in Telegram. Non-owners get a pointer to the desktop app or PWA.
+Groups and channels: store, welcomes, moderation, flags, /recap, /search, /setrules and /rules, /precautions, and the owner's group and channel sends, unchanged.
+
+## Interfaces
+
+The Telegram mini app and its old pages (index, scripts, crm, reporting, connectors) were removed. The desktop app loads /workspace, and the PWA is at /m (installable, offline shell via /sw.js and /offline). Both use the authenticated workspace API under /api/ws. Telegram does not chat: in private the owner gets ops commands only (see the ops command list below), and non-owners get a pointer to the desktop app or PWA.
 
 ## Task memory (never forget)
 
@@ -67,7 +73,7 @@ Connectors that need tokens from you: Gmail app password; Facebook Page or Meta 
 
 Understanding: send a photo to the bot. Royce downloads it through Telegram getFile and sends it to Gemini vision (image_url parts on the same OpenAI-compatible endpoint, with OpenRouter as failover). With no caption it describes the image. With a caption it uses the photo for the request, for example "make an ad like this".
 
-Generation: /image <prompt>, or chat such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
+Generation (desktop app and PWA): an image prompt such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
 
 Tests: the task store is covered by a quick check (add, complete, unavailable lookups). The retry path was run against a stubbed connector before commit.
 
@@ -75,25 +81,25 @@ Tests: the task store is covered by a quick check (add, complete, unavailable lo
 
 /followup <lead name or id> drafts a warm, short follow-up for that lead (Nigerian professional tone, max 3 sentences) using the lead's business, notes and status, then asks if you want it tweaked. Drafts come from app/leadbrain.py draft_followup(lead, context) through the same LLM failover.
 
-Mini app: each lead row on the leads page has a "draft followup" link that calls GET /api/leads/{id}/followup and shows the draft inline.
+Drafts are made in the workspace; in Telegram the owner uses /followup <lead>.
 
 Daily nudges: the bot checks at most once an hour. If any open lead has a next_followup due today or overdue, it sends one message listing them with a one-line reason each, at most once per Lagos day. The nudge goes to the last private chat that messaged the bot (falls back to the owner chat id). State lives in nudge_state.json (git-ignored).
 
 ## Ad doctor (teardowns)
 
-/doctor <paste ad copy or campaign numbers> tears it down: what's weak, what to fix, and 3 specific changes. Copy goes in as ad_copy; numbers that mention ctr/cpc/spend/impressions/clicks are read as campaign_numbers. /doctor with nothing after it, or chat like "check my campaigns", pulls the last 7 days from connected collectors first and diagnoses those real rows. Chat detection also catches "roast this ad" and "why is my ctr bad". Logic is in app/doctor.py diagnose(text, kind). The reports page has a "diagnose" button that POSTs the current rows to POST /api/diagnose.
+The ad doctor (in the desktop app or PWA) tears down pasted ad copy or campaign numbers: what's weak, what to fix, and 3 specific changes. Copy goes in as ad_copy; numbers that mention ctr/cpc/spend/impressions/clicks are read as campaign_numbers. /doctor with nothing after it, or chat like "check my campaigns", pulls the last 7 days from connected collectors first and diagnoses those real rows. Chat detection also catches "roast this ad" and "why is my ctr bad". Logic is in app/doctor.py diagnose(text, kind). The reports page has a "diagnose" button that POSTs the current rows to POST /api/diagnose.
 
 ## Content engine (weekly calendars)
 
-/content <client> | <industry> | <platform> builds a 7-day calendar (day, format, idea, hook, cta) with strict JSON from the LLM and saves it to generated work as type content_calendar. Chat like "content plan for X" asks for the industry and platform in one line. Logic is in app/content.py weekly_calendar(client, industry, platform). The generated work page shows calendars as cards next to ad packages.
+The content engine (in the desktop app or PWA) builds a 7-day calendar for <client> | <industry> | <platform> (day, format, idea, hook, cta) with strict JSON from the LLM and saves it to generated work as type content_calendar. Chat like "content plan for X" asks for the industry and platform in one line. Logic is in app/content.py weekly_calendar(client, industry, platform). The generated work page shows calendars as cards next to ad packages.
 
 ## Voice replies (tts)
 
-/voice <text> or chat like "reply in voice" / "say this in voice" makes a voice note (ogg opus, sendVoice). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
+Voice notes are generated in the desktop app or PWA (ogg opus). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
 
 ## Skills (marketing playbooks)
 
-Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-growth, funnel-design, reporting-storytelling, negotiation-closing). Each has a front matter block with name and description. app/skills.py lists them (list_skills), reads one (get_skill), and picks the most relevant ones for a message by whole-word keyword match (select_skills). Chat injects at most 2 playbooks per turn (skill_block). The /followup, /doctor and /content engines each get their default playbook (engine_skill): followup uses negotiation-closing, doctor uses direct-response (reporting-storytelling for campaign numbers), content uses social-growth. /skills in the bot lists the playbooks with one-line descriptions. To add one, drop a new .md file in skills/ with name and description front matter, and add its keywords to KEYWORDS in app/skills.py.
+Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-growth, funnel-design, reporting-storytelling, negotiation-closing). Each has a front matter block with name and description. app/skills.py lists them (list_skills), reads one (get_skill), and picks the most relevant ones for a message by whole-word keyword match (select_skills). Chat injects at most 2 playbooks per turn (skill_block). The followup, doctor and content engines each get their default playbook (engine_skill): followup uses negotiation-closing, doctor uses direct-response (reporting-storytelling for campaign numbers), content uses social-growth. /skills in the bot lists the playbooks with one-line descriptions. To add one, drop a new .md file in skills/ with name and description front matter, and add its keywords to KEYWORDS in app/skills.py.
 
 ## Phase 2: engineering reliability
 
