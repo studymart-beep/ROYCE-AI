@@ -8,8 +8,8 @@ Scope note: the capability list in the phase 1 brief was cut off after item 21 (
 
 | # | Capability | Status | Maps to | Note |
 |---|---|---|---|---|
-| 1 | Task planning and decomposition | implemented (phase 1) | app/agent/planner.py | LLM plan of 1 to 5 steps, falls back to one llm step on any error. Not yet wired into the bot chat path. |
-| 2 | Intelligent model routing | implemented (phase 1) | app/agent/router.py | capability tags per provider, in-memory health, used by app/llm.py. |
+| 1 | Task planning and decomposition | implemented (phase 3) | app/agent/planner.py, app/agent/chatplan.py | LLM plan of 1 to 5 steps, validated against registered engines, run step by step from the chat path for explicit multi-step asks only. Simple messages stay on the direct chat path. |
+| 2 | Intelligent model routing | implemented (phase 3) | app/agent/router.py | capability tags, cooling or invalid providers are skipped (not just demoted), retryable vs non-retryable errors classified, in-memory health. |
 | 3 | Gemini-primary / OpenRouter automatic failover | implemented | app/llm.py, app/agent/router.py, app/config.py | failover existed before; now routed through the router with health demotion. Label differs slightly: failover was already live, phase 1 added health tracking. |
 | 4 | Automatic retry and error recovery | implemented | app/agent/orchestrator.py, app/telegram_bot.py (tasks.json retries) | orchestrator retries up to 2 times with backoff. Bot retries unavailable tasks every 10 min (existing). |
 | 5 | Result verification | implemented (phase 1) | app/agent/orchestrator.py, app/content.py _validate | orchestrator checks each step's output shape and non-emptiness. content.py already validated 7 days. |
@@ -19,7 +19,7 @@ Scope note: the capability list in the phase 1 brief was cut off after item 21 (
 | 9 | Permission and safety control | implemented (phase 1) | app/agent/permissions.py, app/agent/approvals.py | action classes; send_message/publish/delete need /approve. |
 | 10 | Natural-language command interpretation | implemented (partial) | app/telegram_bot.py handle_chat | regex intent routing plus an LLM task classifier. Not a general intent model. |
 | 11 | Conversation-to-action execution | implemented | app/telegram_bot.py (run_new_task, run_task), app/agent/orchestrator.py | bot turns chat into tasks. orchestrator runs multi-step plans (not yet wired to the bot). |
-| 12 | Progress and status reporting | implemented (partial) | app/telegram_bot.py (/tasks, "on it" acks) | /tasks lists open, done and unavailable items. No live progress for long jobs. |
+| 12 | Progress and status reporting | implemented (phase 3, partial) | app/agent/chatplan.py, app/telegram_bot.py | per-step "step n of m done" for planned tasks, plain final summary, /tasks lists open items. Background jobs have no live progress. |
 | 13 | Error explanation and recovery guidance | implemented (partial) | app/telegram_bot.py (error messages, "kept on my list") | errors are surfaced with the reason and the task is kept for retry. |
 | 14 | User preference adaptation | planned | app/agent/memory.py (preferences saved by heuristic) | heuristic captures "I prefer" and similar. No learned preference model yet. |
 | 15 | Codebase understanding | implemented (phase 2) | skills/coding/codebase.md, app/skills.py coding_block | playbook injected for code questions. Not an agent tool yet: the bot does not run repo scans itself. |
@@ -46,3 +46,10 @@ Not mapped. The brief did not include their names. Send the full list to extend 
 ## Blocked right now
 
 None of items 1 to 21 are blocked on a missing external account. Item 16 is blocked on an owner decision about autonomous commits.
+
+## Phase 3 reliability and chat planning (summary)
+- A1 router cooldown: a provider in cooldown (120 s after a transient error) or marked invalid (auth rejected) is skipped, not called. Bad requests (400/422) fail at once with no failover. All-unavailable raises an error with the wait time. Status: implemented, unit tested. Health is in memory and resets on restart.
+- A2 budget: one shared 30 per hour per chat, reserved before every provider attempt (failover, retries, image and voice included). Unbound work shares a system bucket with the same cap. Thread safe. Status: implemented, concurrency tested. Not persisted across restarts.
+- A3 /health: states not_configured, validated, unavailable (429, timeout, outage: not proven invalid), invalid (401/403). Cheap GET of the model list, cached 5 minutes, keys never printed. Status: implemented, tested with mocked providers. No live check was run against the real providers in tests.
+- B chat planning: explicit multi-step asks only (sequencing words or a numbered list). Plan validated, approval pauses the task, /deny stops it, a failed step blocks later steps, interrupted steps are never repeated. Status: implemented, tested. Limitation: the followup engine is marked consequential, but no outbound send executor exists yet, so an approved followup produces a draft only.
+- C UX: per-step progress, plain-text failure summary, SIGTERM stops between steps, restart marks interrupted tasks failed. Status: implemented. Background jobs (jobs.py) are not part of the planner.

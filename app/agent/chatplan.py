@@ -26,6 +26,7 @@ from . import audit, budget, orchestrator, permissions, planner
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PATH = os.path.join(BASE, "chat_tasks.json")
 _LOCK = threading.Lock()
+STOP_EVENT = threading.Event()  # set by the bot on SIGTERM/SIGINT for a safe stop between steps
 
 MULTI_MARKERS = re.compile(
     r"\b(and then|then|after that|afterwards|first\b.*\bthen|step \d|steps?:|followed by|once that's done)\b", re.I)
@@ -137,8 +138,12 @@ def progress(rec):
     return done, len(rec["steps"])
 
 
-def run(task_id, runner=None):
-    """Run pending steps in order until done, paused for approval, or stopped. Returns the record."""
+def run(task_id, runner=None, on_progress=None):
+    """Run pending steps in order until done, paused for approval, or stopped. Returns the record.
+
+    on_progress(text) is called after each finished step ("step 2 of 3 done") so long tasks report live.
+    STOP_EVENT (set on shutdown) stops before the next step; the current step is never abandoned mid-call.
+    """
     rec = get(task_id)
     if rec is None:
         return None
@@ -148,6 +153,10 @@ def run(task_id, runner=None):
     while True:
         rec = get(task_id)
         idx, step = _next_todo(rec)
+        if STOP_EVENT.is_set():
+            _set(task_id, lambda r: r.__setitem__("status", "stopped"))
+            _audit("task_stopped", task_id, "shutdown")
+            return get(task_id)
         if step is None:
             _set(task_id, lambda r: r.__setitem__("status", "completed"))
             _audit("task_completed", task_id, "ok")
@@ -195,6 +204,12 @@ def run(task_id, runner=None):
                 r["steps"][i]["error"] = None
             _set(task_id, ok)
             _audit("step_done", task_id, f"step {step['n']}")
+            if on_progress:
+                done_n, total_n = progress(get(task_id))
+                try:
+                    on_progress(f"step {done_n} of {total_n} done" + (" ." if done_n < total_n else ""))
+                except Exception:
+                    pass  # a failed progress message must never break the task
         except budget.BudgetExceeded as e:
             def stop(r, i=idx):
                 r["steps"][i]["status"] = FAILED
@@ -235,6 +250,25 @@ def resolve_approval(task_id, approved):
         _set(task_id, lambda r: r.__setitem__("status", "stopped"))
         return get(task_id)
     return run(task_id)
+
+
+def recover_on_start():
+    """Mark tasks left running/planned by a previous process. Interrupted steps are never repeated."""
+    n = 0
+    with _LOCK:
+        d = _load()
+        for tid, rec in d.items():
+            if rec.get("status") in ("running", "planned"):
+                for s in rec["steps"]:
+                    if s["status"] == RUNNING:
+                        s["status"] = FAILED
+                        s["error"] = "bot restarted mid-step; not repeated"
+                rec["status"] = "failed"
+                _audit("task_failed", tid, "restart")
+                n += 1
+        if n:
+            _save(d)
+    return n
 
 
 def task_for_approval(approval_id, chat_id):

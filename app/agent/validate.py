@@ -49,10 +49,12 @@ def classify_probe(pid, key, opener=None):
     if not key:
         return "not_configured", STATE_TEXT["not_configured"]
     try:
-        status = (opener or _request)(pid, key)
-        if 200 <= int(status) < 300:
+        status = int((opener or _request)(pid, key))
+        if 200 <= status < 300:
             return "validated", STATE_TEXT["validated"]
-        return "unavailable", f"unavailable (provider answered HTTP {status})"
+        if status in (401, 403):
+            return "invalid", STATE_TEXT["invalid"]
+        return "unavailable", f"unavailable (provider answered HTTP {status}; not proven invalid)"
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             return "invalid", STATE_TEXT["invalid"]

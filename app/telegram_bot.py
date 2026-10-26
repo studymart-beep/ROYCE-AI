@@ -389,7 +389,7 @@ def handle_multi_step(chat_id, text):
         send(chat_id, sanitize("i couldn't put that into safe steps: " + reason + ". try asking one step at a time."))
         return True
     send(chat_id, f"on it, {len(chatplan.get(task_id)['steps'])} steps. i'll tell you as each one finishes.")
-    rec = chatplan.run(task_id)
+    rec = chatplan.run(task_id, on_progress=lambda t: send(chat_id, t))
     send(chat_id, sanitize(chatplan.summary(rec)))
     return True
 
@@ -655,11 +655,23 @@ def _handle_update_bound(u, msg, chat, chat_id, text):
         try: send(chat_id, "something broke on my side, try again")
         except Exception: pass
 
+def _on_signal(signum, frame):
+    # safe stop: the poll loop exits and running planner tasks stop before their next step
+    from .agent import chatplan
+    chatplan.STOP_EVENT.set()
+    raise SystemExit(0)
+
 def main():
     global TOKEN, API
+    import signal
+    from .agent import chatplan
     get_env()
     me = api("getMe")
     print(f"[bot] connected as @{me['result']['username']}", flush=True)
+    n = chatplan.recover_on_start()
+    if n:
+        print(f"[bot] marked {n} interrupted task(s) as failed (not repeated)", flush=True)
+    signal.signal(signal.SIGTERM, _on_signal)
     jobs.start()
     audit.record("bot", "bot_started", "telegram", "ok")
     offset = None

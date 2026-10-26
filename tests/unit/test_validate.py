@@ -117,3 +117,20 @@ def test_health_shows_every_state(monkeypatch):
     assert "validated (live check passed)" in text
     assert "unavailable" in text
     assert "configured, healthy" not in text  # the old overstated claim is gone
+
+
+def test_bot_health_text_shows_states_and_no_keys(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.setenv("OPENROUTER_API_KEY", SECRET)
+    monkeypatch.setattr(validate, "_request", lambda pid, key: 401 if pid == "gemini" else 429)
+    text = jobs.format_status()
+    assert "invalid" in text and "unavailable" in text
+    assert SECRET not in text
+    assert "validated (live check passed)" not in text.split("gemini")[1].split("\n")[0]
+
+
+def test_bot_health_not_configured_state(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    text = jobs.format_status()
+    assert "not configured" in text
