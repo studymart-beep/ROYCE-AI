@@ -48,3 +48,27 @@ def list_work():
     with _lock:
         items = _load()
     return list(reversed(items))
+
+
+def add_content_calendar(client, industry, platform, cal, source="chat"):
+    """Append a 7-day content calendar (type content_calendar)."""
+    entry = {
+        "id": uuid.uuid4().hex[:10],
+        "type": "content_calendar",
+        "created_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "client": str(client or "").strip(),
+        "product": str(client or "").strip(),
+        "industry": str(industry or "").strip(),
+        "audience": str(industry or "").strip(),
+        "platform": str(platform or "").strip().lower(),
+        "source": source,
+        "days": list((cal or {}).get("days") or []),
+    }
+    with _lock:
+        items = _load()
+        items.append(entry)
+        tmp = PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(items, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, PATH)
+    return entry

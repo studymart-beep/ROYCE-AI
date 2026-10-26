@@ -66,7 +66,19 @@ else if(page==='scripts'){
       main.innerHTML = `<section class=card><div class=empty>no generated work yet. ask royce in the chat to make your first ad.</div></section>`;
       return;
     }
-    main.innerHTML = `<p class=count><span>${plural(items.length,'ad package')}</span><span>newest first</span></p>` + items.map(w=>`
+    const pkgs = items.filter(w=>w.type!=='content_calendar').length;
+    const cals = items.length - pkgs;
+    const countLabel = [pkgs ? plural(pkgs,'ad package') : '', cals ? plural(cals,'content calendar') : ''].filter(Boolean).join(' · ');
+    main.innerHTML = `<p class=count><span>${countLabel}</span><span>newest first</span></p>` + items.map(w=>w.type==='content_calendar' ? `
+      <section class=card>
+        <div class="work-head">
+          <div class=card-title>${esc(w.client)} · 7-day calendar</div>
+          <div class=work-meta>${esc(w.industry)} · ${esc(w.platform)} · ${esc(ago(w.created_at))} · via ${esc(w.source||'mini app')}</div>
+        </div>
+        <div class=work-body>
+          ${(w.days||[]).map(d=>`<div class=beat><b>${esc(d.day)} · ${esc(d.format)}</b>${esc(d.idea)}<i>hook: ${esc(d.hook)}</i><i>cta: ${esc(d.cta)}</i></div>`).join('') || '<div class=sub>none</div>'}
+        </div>
+      </section>` : `
       <section class=card>
         <div class="work-head">
           <div class=card-title>${esc(w.product)}</div>

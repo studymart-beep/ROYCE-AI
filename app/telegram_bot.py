@@ -388,6 +388,12 @@ def handle_chat(chat_id, text):
         hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent ad teardown]"}]
         del hist[:-HIST_MAX]
         return
+    cm = re.search(r"\bcontent (plan|calendar)\s+(for|of)\s+(.+)", text, re.I)
+    if cm:
+        handle_content_chat(chat_id, cm.group(3).strip())
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent content calendar]"}]
+        del hist[:-HIST_MAX]
+        return
     if reply is None:
         cls = classify(text)
         if cls.get("is_task") is True:
@@ -441,6 +447,28 @@ def handle_doctor(chat_id, arg):
         send(chat_id, "couldn't get a teardown right now (the llm is busy). try again in a minute.")
 
 
+def handle_content(chat_id, arg):
+    from . import content
+    parts = [p.strip() for p in (arg or "").split("|")]
+    if len(parts) != 3 or not all(parts):
+        send(chat_id, "usage: /content <client> | <industry> | <platform>\nexample: /content NOISE earbuds | consumer electronics | tiktok")
+        return
+    client, industry, platform = parts
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    try:
+        cal = content.weekly_calendar(client, industry, platform, source="telegram")
+        send(chat_id, content.format_calendar(client, platform, cal) + "\n\nsaved to your generated work.")
+    except ValueError as e:
+        send(chat_id, str(e))
+    except Exception as e:
+        print("[bot] content error", e)
+        send(chat_id, "couldn't build the calendar right now (the llm is busy). try again in a minute.")
+
+
+def handle_content_chat(chat_id, client):
+    send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
+
+
 def handle_update(u):
     msg = u.get("message") or {}
     chat = msg.get("chat") or {}
@@ -471,6 +499,7 @@ def handle_update(u):
         elif text == "/tasks": handle_tasks(chat_id)
         elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
         elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
+        elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)
