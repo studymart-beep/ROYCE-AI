@@ -54,22 +54,19 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 - B chat planning: explicit multi-step asks only (sequencing words or a numbered list). Plan validated, approval pauses the task, /deny stops it, a failed step blocks later steps, interrupted steps are never repeated. Status: implemented, tested. Limitation: the followup engine is marked consequential, but no outbound send executor exists yet, so an approved followup produces a draft only.
 - C UX: per-step progress, plain-text failure summary, SIGTERM stops between steps, restart marks interrupted tasks failed. Status: implemented. Background jobs (jobs.py) are not part of the planner.
 
-## Phase 4: desktop workspace (status)
+## Phase 4: web workspace (status)
 
-- Desktop interface: implemented as a browser workspace at /workspace (sidebar with conversations, real chat through /api/ws/chat, planner task panel with polling, approvals with approve/reject, tasks, memory with forget, connections and provider/budget status, settings). Runs on the existing FastAPI server and shares the bot's modules (chatplan, approvals, memory, budget, audit). Gated by WORKSPACE_TOKEN. Status: implemented, tested at the API level.
+- Web interface: implemented as a browser workspace at /workspace (sidebar with conversations, real chat through /api/ws/chat, planner task panel with polling, approvals with approve/reject, tasks, memory with forget, connections and provider/budget status, settings). Runs on the existing FastAPI server and shares the bot's modules (chatplan, approvals, memory, budget, audit). Gated by WORKSPACE_TOKEN. Status: implemented, tested at the API level.
 - Installable app: implemented as a PWA (manifest plus service worker that caches only the static shell). Installed from Chrome or Edge on Windows via Install app.
-- Native Windows executable: the Tauri desktop app (desktop/) is the native path. Linux-verified (native build compiled; window loaded the production /workspace under Xvfb). Windows .msi/.exe installer: pending the user's build on Windows (bundling is Windows-only). The installed PWA window remains available.
+- Native Windows executable: REMOVED. The Tauri desktop app (desktop/) was deleted; the product is web only (/workspace and /m). The installed PWA window is the only app-like window.
 
-## Phase 4 extension: mobile PWA, desktop client, deployment prep (status)
+## Phase 4 extension: mobile PWA, deployment prep (status)
 
 - Mobile PWA at /m (app/static/mobile.html, mobile.css, mobile.js). Implemented, tested by TestClient
   and static checks. Not tested on a real phone here.
 - Service worker at /sw.js: cache-first for the shell only, network-only for /api, offline page at
   /offline. Implemented, tested for scope and cache rules.
-- Desktop Tauri v2 client (desktop/). Linux-verified: native build (cargo tauri build --no-bundle)
-  with ROYCE_BACKEND_URL defaulting to https://royce-ai.onrender.com, and the window loaded the
-  production /workspace under Xvfb. Windows .msi/.exe installer: pending the user's build on Windows
-  (bundling is Windows-only; no .exe exists yet). Steps: desktop/README.md.
+- Tauri desktop client (desktop/): REMOVED. Web only now. It was never shipped as an installer.
 - Persistence: ROYCE_DATA_DIR (app/paths.py). Implemented.
 - CORS: ALLOWED_ORIGINS (main.py). Implemented, tested for allowed and disallowed origins.
 - Deployment: render.yaml added. NOTHING DEPLOYED.
@@ -89,7 +86,7 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 | Owner-approved sends | implemented (fake-tested) | app/tgsend.py, app/agent/approvals.py | owner only, in private chat: "tell the group <name>: <text>" or "post to the channel <name>: <text>". Exact text shown, then /approve <id> sends via sendMessage to the stored chat id. Audit logs ids, never text. |
 | Deletion precautions | implemented (fake-tested) | app/tgprecautions.py | off by default, /precautions on|off (admin). When on, a flagged suspicious link is queued for owner approval in the owner DM. /approve runs deleteMessage and optional restrictChatMember. Nothing automatic. |
 | Group rules | implemented (fake-tested) | app/tgrules.py, app/tggroups.py | /setrules <text> (admin, up to 2000 chars), /rules (anyone). Included in the recap context only. Does not change flagging. |
-| Interface split | implemented | app/telegram_bot.py, app/main.py, app/static/mobile.html, app/static/workspace.html | AI chat lives in the desktop app and the PWA (/workspace, /m). Telegram private chat is ops only: owner ops commands, and a pointer for everyone else. The old telegram mini app pages and their /api routes were removed. The menu button is reset to default at bot start (setChatMenuButton). Test: tests/unit/test_bot_ops_only.py. |
+| Interface split | implemented | app/telegram_bot.py, app/main.py, app/static/mobile.html, app/static/workspace.html | AI chat lives in the web app and the PWA (/workspace, /m). Telegram private chat is ops only: owner ops commands, and a pointer for everyone else. The old telegram mini app pages and their /api routes were removed. The menu button is reset to default at bot start (setChatMenuButton). Test: tests/unit/test_bot_ops_only.py. |
 | Honest limits | documented | README.md, /help | the bot api cannot read the owner's private chats with others. The bot sees only its own private chats and groups it is a member of. |
 | Live group test | not run | none | no test group was available. The live check covered the bot start, the allowed_updates list and the poller only. |
 

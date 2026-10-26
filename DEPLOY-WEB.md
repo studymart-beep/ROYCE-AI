@@ -7,7 +7,7 @@ at relative `/api/ws/*` paths, and it has a single-page layout with no client-si
 
 The existing Render service (`royce-ai`, see `render.yaml`) already serves everything:
 
-- https://royce-ai.onrender.com/workspace (desktop workspace)
+- https://royce-ai.onrender.com/workspace (web workspace)
 - https://royce-ai.onrender.com/m (mobile PWA, bottom tabs)
 - https://royce-ai.onrender.com/api/ws/* (the API, open access: no token)
 

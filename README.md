@@ -1,6 +1,6 @@
 # Royce AI
 
-In-house AI for Royce Marketing Agency: ad scripts, CRM, campaign reporting. AI chat lives in the desktop app and the PWA (/workspace and /m). Telegram is ops and alerts only: group moderation, recaps, welcomes, owner approvals and group sends.
+In-house AI for Royce Marketing Agency: ad scripts, CRM, campaign reporting. AI chat lives in the web app and the PWA (/workspace and /m). Telegram is ops and alerts only: group moderation, recaps, welcomes, owner approvals and group sends.
 
 ## Run
 
@@ -38,17 +38,17 @@ API routes:
 
 Presets: last_7d (default), last_14d, last_30d, yesterday, today, this_month (TikTok only supports explicit dates; the collector maps these).
 
-Ask for a report or campaign performance in the desktop app or PWA: the workspace pulls the rows from every configured collector, then has the LLM write a client-ready summary from those real numbers. If nothing is connected, it tells you which token to add.
+Ask for a report or campaign performance in the web app or PWA: the workspace pulls the rows from every configured collector, then has the LLM write a client-ready summary from those real numbers. If nothing is connected, it tells you which token to add.
 
 ## Telegram command list (ops only)
 
 Owner private chat with the bot: /start (this list), /leads, /addlead Name | Business | Contact, /report, /followup <lead name or id>, /tasks, /skills, /health, /approve <id>, /deny <id>, tell group <name>: <text>, post channel <name>: <text> (queued, approved with /approve), /help, /deletemydata yes.
-Anything else in private (free text, /script, /doctor, /content, /image, /voice) is not handled in Telegram. Non-owners get a pointer to the desktop app or PWA.
+Anything else in private (free text, /script, /doctor, /content, /image, /voice) is not handled in Telegram. Non-owners get a pointer to the web app or PWA.
 Groups and channels: store, welcomes, moderation, flags, /recap, /search, /setrules and /rules, /precautions, and the owner's group and channel sends, unchanged.
 
 ## Interfaces
 
-The Telegram mini app and its old pages (index, scripts, crm, reporting, connectors) were removed. The desktop app loads /workspace, and the PWA is at /m (installable, offline shell via /sw.js and /offline). Both use the authenticated workspace API under /api/ws. Telegram does not chat: in private the owner gets ops commands only (see the ops command list below), and non-owners get a pointer to the desktop app or PWA.
+The Telegram mini app and its old pages (index, scripts, crm, reporting, connectors) were removed. The web app loads at /workspace, and the PWA is at /m (installable, offline shell via /sw.js and /offline). Both use the authenticated workspace API under /api/ws. Telegram does not chat: in private the owner gets ops commands only (see the ops command list below), and non-owners get a pointer to the web app or PWA.
 
 ## Task memory (never forget)
 
@@ -73,7 +73,7 @@ Connectors that need tokens from you: Gmail app password; Facebook Page or Meta 
 
 Understanding: send a photo to the bot. Royce downloads it through Telegram getFile and sends it to Gemini vision (image_url parts on the same OpenAI-compatible endpoint, with OpenRouter as failover). With no caption it describes the image. With a caption it uses the photo for the request, for example "make an ad like this".
 
-Generation (desktop app and PWA): an image prompt such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
+Generation (web app and PWA): an image prompt such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
 
 Tests: the task store is covered by a quick check (add, complete, unavailable lookups). The retry path was run against a stubbed connector before commit.
 
@@ -87,15 +87,15 @@ Daily nudges: the bot checks at most once an hour. If any open lead has a next_f
 
 ## Ad doctor (teardowns)
 
-The ad doctor (in the desktop app or PWA) tears down pasted ad copy or campaign numbers: what's weak, what to fix, and 3 specific changes. Copy goes in as ad_copy; numbers that mention ctr/cpc/spend/impressions/clicks are read as campaign_numbers. /doctor with nothing after it, or chat like "check my campaigns", pulls the last 7 days from connected collectors first and diagnoses those real rows. Chat detection also catches "roast this ad" and "why is my ctr bad". Logic is in app/doctor.py diagnose(text, kind). The reports page has a "diagnose" button that POSTs the current rows to POST /api/diagnose.
+The ad doctor (in the web app or PWA) tears down pasted ad copy or campaign numbers: what's weak, what to fix, and 3 specific changes. Copy goes in as ad_copy; numbers that mention ctr/cpc/spend/impressions/clicks are read as campaign_numbers. /doctor with nothing after it, or chat like "check my campaigns", pulls the last 7 days from connected collectors first and diagnoses those real rows. Chat detection also catches "roast this ad" and "why is my ctr bad". Logic is in app/doctor.py diagnose(text, kind). The reports page has a "diagnose" button that POSTs the current rows to POST /api/diagnose.
 
 ## Content engine (weekly calendars)
 
-The content engine (in the desktop app or PWA) builds a 7-day calendar for <client> | <industry> | <platform> (day, format, idea, hook, cta) with strict JSON from the LLM and saves it to generated work as type content_calendar. Chat like "content plan for X" asks for the industry and platform in one line. Logic is in app/content.py weekly_calendar(client, industry, platform). The generated work page shows calendars as cards next to ad packages.
+The content engine (in the web app or PWA) builds a 7-day calendar for <client> | <industry> | <platform> (day, format, idea, hook, cta) with strict JSON from the LLM and saves it to generated work as type content_calendar. Chat like "content plan for X" asks for the industry and platform in one line. Logic is in app/content.py weekly_calendar(client, industry, platform). The generated work page shows calendars as cards next to ad packages.
 
 ## Voice replies (tts)
 
-Voice notes are generated in the desktop app or PWA (ogg opus). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
+Voice notes are generated in the web app or PWA (ogg opus). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
 
 ## Skills (marketing playbooks)
 
@@ -109,11 +109,10 @@ Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-
 - Coding playbooks: skills/coding/codebase.md and debugging.md, added to the bot prompt for code and debug questions.
 - Tests: `.venv/bin/python -m pytest -q tests`.
 
-## Royce AI workspace (web app, installable on Windows)
+## Royce AI workspace (web app)
 
-The workspace is a single-page web app served by the same FastAPI server. It is not an Electron or native
-desktop build. In Chrome or Edge on Windows you can install it as an app (see below), which gives it its own
-window and launcher icon. No native .exe is built or shipped.
+The workspace is a single-page web app served by the same FastAPI server. It is the only client: there is no native
+app. In Chrome or Edge you can install it as an app (see below), which gives it its own window and launcher icon.
 
 OPEN ACCESS (owner decision): the workspace has no login. /workspace and /m open straight into the app, with no token prompt. Anyone who has the URL can use the AI, read CRM and memory, approve actions and change settings. The obscurity of the URL is the only protection right now. Do not share the link, and do not put anything sensitive in it that you would not show a stranger.
 
@@ -121,7 +120,7 @@ Run the backend with the existing uvicorn command (see Run above). Open the work
 
 To re-enable a gate later (not built now): either add a token check back in app/workspace_api.py (a FastAPI dependency on the router that compares the x-workspace-token header to WORKSPACE_TOKEN, failing closed when unset), or put the service behind Render's own protection or a proxy that asks for a login.
 
-Install as a Windows app:
+Install from Chrome or Edge:
 1. Open the workspace URL in Chrome or Edge.
 2. Chrome: menu (three dots), then Save and share, then Install page as app. Edge: menu (three dots), then Apps, then Install this site as an app.
 3. Click Install. Royce AI opens in its own window and appears in the Start menu.
@@ -145,16 +144,8 @@ shows a fake answer. The service worker is served at /sw.js with scope "/".
 
 Test locally: `uvicorn app.main:app --port 8000`, then open http://localhost:8000/m on the phone via
 your LAN IP (the phone must reach the server). For a real service worker on a phone you need HTTPS
-(a tunnel or Render). On a desktop browser, http://localhost:8000/m works.
+(a tunnel or Render). On a laptop browser, http://localhost:8000/m works.
 
-## Desktop app (Tauri, Windows)
-
-desktop/ is a Tauri v2 project that opens the backend workspace in a native Windows window
-(1280x800, min 1024x640). It holds no keys and no token. The backend URL comes from ROYCE_BACKEND_URL
-at build and launch. See desktop/README.md for the exact steps.
-
-Status: the project is complete and validated for config and wiring. The Windows .msi/.exe has not
-been built: Tauri Windows builds must run on Windows, and this repo was prepared on Linux.
 
 ## Deployment prep (nothing deployed)
 

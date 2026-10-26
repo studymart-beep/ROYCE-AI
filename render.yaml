@@ -19,7 +19,7 @@ services:
         value: "3.13"
       - key: ROYCE_DATA_DIR            # sqlite, json stores, audit log, backups live here (on the disk)
         value: /var/data/royce
-      - key: ALLOWED_ORIGINS           # comma-separated origins for any separate static host or the desktop app
+      - key: ALLOWED_ORIGINS           # comma-separated origins for any separate static host
         sync: false
       - key: WORKSPACE_TOKEN           # owner token: set in the dashboard, never commit it
         sync: false
