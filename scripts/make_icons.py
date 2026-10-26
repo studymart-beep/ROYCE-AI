@@ -1,7 +1,7 @@
 """Generate Royce AI icons (forest square, gold up-right arrow). Needs Pillow: pip install pillow.
 
 Writes app/static/icon-192.png, icon-512.png (rounded), icon-maskable-192.png, icon-maskable-512.png
-(full-bleed, art kept inside the 80% safe zone), and desktop/src-tauri/icons/ (png set + icon.ico).
+(full-bleed, art kept inside the 80% safe zone).
 Re-run after changing the design; outputs are committed so nothing needs Pillow at runtime.
 """
 import os
@@ -11,7 +11,6 @@ FOREST = (13, 59, 46, 255)
 GOLD = (201, 162, 75, 255)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(ROOT, "app", "static")
-TAURI_ICONS = os.path.join(ROOT, "desktop", "src-tauri", "icons")
 
 
 def arrow(size, pad_frac, rounded):
@@ -48,11 +47,4 @@ if __name__ == "__main__":
     save(arrow(512, 0.12, True), os.path.join(STATIC, "icon-512.png"))
     save(arrow(192, 0.20, False), os.path.join(STATIC, "icon-maskable-192.png"))
     save(arrow(512, 0.20, False), os.path.join(STATIC, "icon-maskable-512.png"))
-    for n in (32, 64, 128, 256):
-        save(arrow(n, 0.12, True), os.path.join(TAURI_ICONS, f"{n}x{n}.png"))
-    save(arrow(256, 0.12, True), os.path.join(TAURI_ICONS, "128x128@2x.png"))
-    save(arrow(512, 0.12, True), os.path.join(TAURI_ICONS, "icon.png"))
-    big = arrow(256, 0.12, True)
-    os.makedirs(TAURI_ICONS, exist_ok=True)
-    big.save(os.path.join(TAURI_ICONS, "icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     print("icons written")

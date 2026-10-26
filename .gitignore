@@ -20,9 +20,6 @@ health.json
 conversations.json
 chat_tasks.json
 
-# Tauri build output
-desktop/src-tauri/target/
-desktop/src-tauri/gen/
 tgstore.db
 tgwelcomes.json
 tgmod.json
