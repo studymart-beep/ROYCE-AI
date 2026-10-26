@@ -1,4 +1,4 @@
-import json, os, time, urllib.request, urllib.parse
+import json, os, re, time, urllib.request, urllib.parse
 from .llm import chat_text, generate_script_package
 from . import db
 
@@ -50,24 +50,32 @@ def handle_script(chat_id, arg):
     caps = "\n\n".join(pkg.get("captions", []))
     send(chat_id, f"🎯 HOOKS\n{hooks}\n\n🎬 SCRIPT\n{script}\n\n✍️ CAPTIONS\n{caps}")
 
+SYSTEM_PROMPT = (
+    "You are Royce AI, the in-house AI for Royce Marketing Agency, a Nigerian ad agency in Lagos. "
+    "You speak like a sharp, friendly colleague: concise, confident, no corporate fluff, light Nigerian flavor is fine. "
+    "You know the agency runs Meta, TikTok and Google ad campaigns for clients and maintains a CRM of leads. "
+    "Never introduce or re-introduce yourself unless explicitly asked who you are. "
+    "Answer the actual question directly."
+)
+HIST_MAX = 20
+
+def crm_snapshot():
+    s = db.summary()
+    st = ", ".join(f"{k} {v}" for k, v in sorted(s["by_status"].items())) or "none yet"
+    return f"Live CRM snapshot: {s['total']} leads total. By status: {st}. {len(s['overdue'])} overdue follow-ups."
+
 def handle_chat(chat_id, text):
     hist = CHAT_HIST.setdefault(chat_id, [])
     api("sendChatAction", chat_id=chat_id, action="typing")
     low = text.lower()
     reply = None
-    if any(w in low for w in ("ad", "script", "hook", "caption", "advert")) and any(w in low for w in ("make", "generate", "create", "write", "give me")):
+    if re.search(r"\b(script|scripts|hooks?|captions?|ad package)\b", low) and re.search(r"\b(make|generate|create|write|give me)\b", low):
         reply = ("Lets do it properly. Give me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
-    elif any(w in low for w in ("lead", "crm", "client", "report", "how many")):
-        s = db.summary()
-        reply = f"📊 CRM: {s['total']} leads. By status: {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue followups."
-        if s["overdue"]:
-            reply += "\n\nOverdue:\n" + "\n".join(f"• {l['name']} (due {l['next_followup']})" for l in s["overdue"][:10])
     if reply is None:
-        sysmsg = ("You are Royce AI, assistant for Royce Marketing Agency. "
-                  "You help with ad scripts, campaign reporting and lead management. "
-                  "Be concise, Telegram-friendly plain text, no markdown headers.")
-        reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-8:] + [{"role": "user", "content": text}], timeout=20)
+        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+        reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
     hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
+    del hist[:-HIST_MAX]
     send(chat_id, reply)
 
 def handle_update(u):
