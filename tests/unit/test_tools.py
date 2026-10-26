@@ -120,3 +120,15 @@ def test_backup_fails_cleanly_without_db(sandbox, monkeypatch):
 def test_git_status_runs_real_git():
     out = tools.run("git_status")
     assert "output" in out and isinstance(out["output"], str)
+
+
+def test_switched_off_tool_is_refused_at_dispatch(sandbox, monkeypatch, tmp_path):
+    # the owner toggle must be honored by run(), not just shown in the UI
+    monkeypatch.setattr(tools, "TOGGLE_PATH", str(tmp_path / "tools_config.json"))
+    name = next(iter(tools.REGISTRY))
+    tools.set_enabled(name, False)
+    assert tools.enabled(name) is False
+    with pytest.raises(tools.ToolError, match="switched off"):
+        tools.run(name, {})
+    tools.set_enabled(name, True)
+    assert tools.enabled(name) is True
