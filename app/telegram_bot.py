@@ -1,7 +1,7 @@
 import json, os, re, threading, time, urllib.request, urllib.parse
-from .llm import chat_text, chat_vision, generate_script_package
+from .llm import chat_text
 from . import imagegen
-from . import db, collectors, workstore, tasks
+from . import db, collectors, tasks
 from . import leadbrain
 from . import skills
 from .style import VOICE_RULES, sanitize
@@ -11,7 +11,6 @@ from .agent import budget, memory, approvals, permissions, jobs, audit
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
 API = None
-CHAT_HIST = {}  # chat_id -> list of messages
 CACHE = {}      # (text) -> (ts, reply)
 CACHE_TTL = 300
 
@@ -36,24 +35,6 @@ def send_photo(chat_id, data, caption=""):
     parts.append(f"\r\n--{boundary}--\r\n".encode())
     body = b"".join(parts)
     req = urllib.request.Request(f"https://api.telegram.org/bot{TOKEN}/sendPhoto", data=body,
-                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with urllib.request.urlopen(req, timeout=70) as r:
-        return json.loads(r.read())
-
-def send_voice(chat_id, data, caption=""):
-    """Upload ogg opus bytes as a Telegram voice note (multipart sendVoice)."""
-    boundary = "----royce" + os.urandom(8).hex()
-    parts = []
-    def field(name, value):
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
-    field("chat_id", str(chat_id))
-    if caption:
-        field("caption", caption[:1000])
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="voice"; filename="royce.ogg"\r\nContent-Type: audio/ogg\r\n\r\n'.encode())
-    parts.append(data)
-    parts.append(f"\r\n--{boundary}--\r\n".encode())
-    body = b"".join(parts)
-    req = urllib.request.Request(f"https://api.telegram.org/bot{TOKEN}/sendVoice", data=body,
                                  headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     with urllib.request.urlopen(req, timeout=70) as r:
         return json.loads(r.read())
@@ -124,22 +105,6 @@ def get_updates(offset=None):
     with urllib.request.urlopen(url, timeout=70) as r:
         return json.loads(r.read())
 
-def handle_script(chat_id, arg):
-    parts = [p.strip() for p in arg.split("|")]
-    if len(parts) < 3:
-        send(chat_id, "format: /script product | audience | platform\nexample: /script NOISE earbuds | young Lagos commuters | tiktok")
-        return
-    product, audience, platform = parts[0], parts[1], parts[2].lower()
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    pkg = generate_script_package(product, audience, platform)
-    workstore.add_package(pkg, product, audience, platform, source="telegram")
-    hooks = "\n".join(f"{i+1}. {h}" for i, h in enumerate(pkg.get("hooks", [])))
-    script = "\n".join(f"• {s.get('beat','')}: {s.get('visual','')} — {s.get('voiceover','')}" for s in pkg.get("script", []))
-    caps = "\n\n".join(pkg.get("captions", []))
-    send(chat_id, f"🎯 HOOKS\n{hooks}\n\n🎬 SCRIPT\n{script}\n\n✍️ CAPTIONS\n{caps}")
-
-
-# ---------- task memory: work the user gives Royce is tracked until it is done ----------
 RETRY_EVERY = 600          # re-test unavailable tasks at most every 10 minutes
 MAX_RETRY_ATTEMPTS = 144   # 10-minute checks for about 24 hours, then the task stays listed
 
@@ -179,43 +144,6 @@ def _check_passes(check):
         return bool(collectors.configured_names())
     return False
 
-def handle_image(chat_id, prompt):
-    if not prompt:
-        send(chat_id, "usage: /image a neon-lit earbud on a dark bronze background, product shot")
-        return
-    t = tasks.add_task(chat_id, prompt, status="open", check={"type": "retry", "action": "image", "prompt": prompt, "attempts": 0})
-    send(chat_id, "generating that now")
-    api("sendChatAction", chat_id=chat_id, action="upload_photo")
-    try:
-        run_task(t)
-    except imagegen.ImageError as e:
-        reason = str(e)
-        tasks.mark_unavailable(t["id"], note=reason, check={"type": "retry", "action": "image", "prompt": prompt, "attempts": 1})
-        send(chat_id, f"{reason}\nkept it on my list, i'll retry and send it when it works ✅")
-        return
-    tasks.complete_task(t["id"], note="done")
-
-def handle_photo(chat_id, msg, caption):
-    """Describe or analyze a photo. A caption with the photo is treated as the request ('make an ad like this')."""
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    got = download_photo(msg)
-    if not got:
-        send(chat_id, "couldn't read that photo, try sending it again")
-        return
-    data, mime = got
-    ask = caption or "describe this image in a few sentences: what's in it, how it looks, and what it could be used for in an ad."
-    if caption:
-        ask = (f"The user sent this photo with the request: \"{caption}\". "
-               "Use the photo for it. If they want an ad, script or creative based on it, do that using what you see.")
-    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
-    try:
-        reply = chat_vision([{"role": "system", "content": sysmsg}, {"role": "user", "content": ask}], data, mime=mime)
-    except Exception as e:
-        print(f"[bot] vision error: {e}", flush=True)
-        send(chat_id, f"couldn't look at that photo: image understanding (gemini, openrouter fallback) failed: {str(e)[:200]}")
-        return
-    send(chat_id, reply)
-
 def handle_inbox_now(chat_id):
     s = collectors.get("gmail").summary(days=7)
     lines = [f"gmail: {s['unread']} unread, {s['recent']} received in the last 7 days."]
@@ -223,19 +151,6 @@ def handle_inbox_now(chat_id):
         lines.append("unread from:")
         lines += [f"• {x['sender']} ({x['count']})" for x in s["unread_senders"]]
     send(chat_id, "\n".join(lines))
-
-def handle_inbox(chat_id):
-    if not collectors.get("gmail").configured:
-        t = tasks.add_task(chat_id, "check my gmail inbox", status="unavailable",
-                           check={"type": "collector", "name": "gmail", "action": "inbox"},
-                           note="gmail not connected")
-        send(chat_id, "gmail isn't connected yet. paste an app password on the connectors page and i'll pull your inbox. i saved this on my list and ill ping u once it's connected ✅")
-        return
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    try:
-        handle_inbox_now(chat_id)
-    except collectors.CollectorError as e:
-        send(chat_id, str(e))
 
 def memory_block(text, chat_id=None):
     try:
@@ -410,93 +325,6 @@ def handle_report(chat_id, text):
     footer = "\n\n" + "\n".join(f"{e['collector']}: {e['error']}" for e in errors) if errors else ""
     send(chat_id, narrative + "\n\n" + table + footer)
 
-def handle_multi_step(chat_id, text):
-    """Planner path for explicit multi-step asks. Returns True if it handled the message."""
-    from .agent import chatplan
-    if not chatplan.looks_multi_step(text):
-        return False
-    task_id, reason = chatplan.start(chat_id, text, chat_fn=lambda msgs: chat_text(msgs, temperature=0, timeout=20))
-    if task_id is None:
-        send(chat_id, sanitize("i couldn't put that into safe steps: " + reason + ". try asking one step at a time."))
-        return True
-    send(chat_id, f"on it, {len(chatplan.get(task_id)['steps'])} steps. i'll tell you as each one finishes.")
-    rec = chatplan.run(task_id, on_progress=lambda t: send(chat_id, t))
-    send(chat_id, sanitize(chatplan.summary(rec)))
-    return True
-
-def handle_chat(chat_id, text):
-    hist = CHAT_HIST.setdefault(chat_id, [])
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    low = text.lower()
-    reply = None
-    if handle_multi_step(chat_id, text):
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[ran multi-step task]"}]
-        del hist[:-HIST_MAX]
-        return
-    if any(w in low for w in REPORT_WORDS) and any(w in low for w in ("report", "performance", "how", "pull", "show", "give", "result", "doing")):
-        handle_report(chat_id, text)
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent campaign report]"}]
-        del hist[:-HIST_MAX]
-        return
-    img = re.search(r"\b(generate|create|make|draw|design)\s+(an?\s+|the\s+|me\s+an?\s+)?(image|picture|pic|photo|visual|graphic)s?\b\s*(of|for|with|showing)?", low)
-    if img and reply is None:
-        prompt = re.sub(r"^.*?\b(image|picture|pic|photo|visual|graphic)s?\b\s*(of|for|with|showing)?\s*", "", text, count=1, flags=re.I).strip() or text
-        handle_image(chat_id, prompt)
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[generated image]"}]
-        del hist[:-HIST_MAX]
-        return
-    if re.search(r"\b(gmail|inbox|unread)\b", low) and re.search(r"\b(check|show|pull|summar|what|any|how|read|list|see)\w*", low):
-        handle_inbox(chat_id)
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent inbox summary]"}]
-        del hist[:-HIST_MAX]
-        return
-    if re.search(r"\b(script|scripts|hooks?|captions?|ad package)\b", low) and re.search(r"\b(make|generate|create|write|give me)\b", low):
-        reply = ("send me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
-    parts = [p.strip() for p in text.split("|")]
-    if reply is None and len(parts) == 3 and all(parts):
-        # conversational ad generation: "product | audience | platform" in chat
-        handle_script(chat_id, text)
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[generated ad package]"}]
-        del hist[:-HIST_MAX]
-        return
-    if re.search(r"\b(check|pull|show|review)\b.*\bcampaigns?\b", low) or re.search(r"\bcheck my ads\b", low):
-        handle_doctor(chat_id, "")
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent ad teardown]"}]
-        del hist[:-HIST_MAX]
-        return
-    from . import doctor as _doc
-    if _doc.wants_diagnose(text):
-        handle_doctor(chat_id, "" if re.search(r"\b(this|my)\b.*\bcampaigns?\b", low) and not re.search(r"\d", text) else text)
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent ad teardown]"}]
-        del hist[:-HIST_MAX]
-        return
-    cm = re.search(r"\bcontent (plan|calendar)\s+(for|of)\s+(.+)", text, re.I)
-    if cm:
-        handle_content_chat(chat_id, cm.group(3).strip())
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent content calendar]"}]
-        del hist[:-HIST_MAX]
-        return
-    vm = re.search(r"\b(say (this|that|it) in voice|reply in voice|voice (note|reply)|in a voice note)\b", low)
-    if vm:
-        spoken = re.sub(r"\b(say (this|that|it) in voice|reply in voice|voice (note|reply)|in a voice note)\b[:,]?\s*", "", text, flags=re.I).strip()
-        handle_voice(chat_id, spoken or "royce ai here, what do you need")
-        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent voice note]"}]
-        del hist[:-HIST_MAX]
-        return
-    if reply is None:
-        cls = classify(text)
-        if cls.get("is_task") is True:
-            reply = run_new_task(chat_id, text, "chat", needs=cls.get("needs"), summary=str(cls.get("summary") or ""), hist=hist)
-            hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
-            del hist[:-HIST_MAX]
-            return
-        mem = memory_block(text, chat_id)
-        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text) + skills.coding_block(text)
-        reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
-    hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
-    del hist[:-HIST_MAX]
-    send(chat_id, reply)
-
 def handle_followup(chat_id, arg):
     arg = (arg or "").strip()
     if not arg:
@@ -511,83 +339,12 @@ def handle_followup(chat_id, arg):
     send(chat_id, f"follow-up for #{lead['id']} {lead['name']}:\n\n{draft}\n\nwant me to tweak it or add a note?")
 
 
-def handle_doctor(chat_id, arg):
-    from . import doctor
-    arg = (arg or "").strip()
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    try:
-        if not arg:
-            names = collectors.configured_names()
-            if not names:
-                send(chat_id, "usage: /doctor <paste ad copy or campaign numbers>\nor connect an ad platform and say 'check my campaigns'.")
-                return
-            rows, errors = collectors.fetch_all("last_7d")
-            if not rows:
-                send(chat_id, "pulled from " + ", ".join(names) + " but no campaign rows came back for last_7d.")
-                return
-            kind, body = "campaign_numbers", rows
-        else:
-            kind = "campaign_numbers" if re.search(r"\d", arg) and re.search(r"\b(ctr|cpc|spend|impressions|clicks|roas)\b", arg, re.I) else "ad_copy"
-            body = arg
-        send(chat_id, "teardown:\n\n" + doctor.diagnose(body, kind))
-    except ValueError as e:
-        send(chat_id, str(e))
-    except Exception as e:
-        print("[bot] doctor error", e)
-        send(chat_id, "couldn't get a teardown right now (the llm is busy). try again in a minute.")
-
-
-def handle_content(chat_id, arg):
-    from . import content
-    parts = [p.strip() for p in (arg or "").split("|")]
-    if len(parts) != 3 or not all(parts):
-        send(chat_id, "usage: /content <client> | <industry> | <platform>\nexample: /content NOISE earbuds | consumer electronics | tiktok")
-        return
-    client, industry, platform = parts
-    api("sendChatAction", chat_id=chat_id, action="typing")
-    try:
-        cal = content.weekly_calendar(client, industry, platform, source="telegram")
-        send(chat_id, content.format_calendar(client, platform, cal) + "\n\nsaved to your generated work.")
-    except ValueError as e:
-        send(chat_id, str(e))
-    except Exception as e:
-        print("[bot] content error", e)
-        send(chat_id, "couldn't build the calendar right now (the llm is busy). try again in a minute.")
-
-
-def handle_voice(chat_id, text):
-    from . import voice
-    text = (text or "").strip()
-    if not text:
-        send(chat_id, "usage: /voice <what to say>\nexample: /voice royce is online, send me the lead list")
-        return
-    api("sendChatAction", chat_id=chat_id, action="record_voice")
-    try:
-        data = voice.tts(text)
-    except voice.VoiceUnavailable as e:
-        send(chat_id, str(e))
-        return
-    except Exception as e:
-        print("[bot] voice error", e)
-        send(chat_id, voice.NO_PROVIDER_MSG)
-        return
-    try:
-        send_voice(chat_id, data)
-    except Exception as e:
-        print("[bot] sendVoice error", e)
-        send(chat_id, "made the voice but telegram rejected the upload. try again in a minute.")
-
-
 def handle_skills(chat_id):
     lines = ["marketing skills i use in answers (max 2 per reply, picked by what you ask):"]
     for s in skills.list_skills():
         lines.append(f"• {s['name']}: {s['description']}")
     lines.append("\nask about hooks, brand, posts, funnels, reports or pricing and i pull the right one.")
     send(chat_id, "\n".join(lines))
-
-
-def handle_content_chat(chat_id, client):
-    send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
 
 
 def handle_deny(chat_id, arg):
@@ -620,14 +377,6 @@ def handle_approve(chat_id, arg):
     ok, msg = approvals.approve(chat_id, rid)
     send(chat_id, msg)
 
-def remember_facts(chat_id, text):
-    try:
-        saved = memory.learn(text, chat_id=chat_id)
-        if saved:
-            print(f"[bot] saved memory: {saved}", flush=True)
-    except Exception as e:
-        print(f"[bot] memory save failed: {e}", flush=True)
-
 def handle_group_update(msg, chat, edited):
     """Groups and supergroups go to app/tggroups.py. Private chats never reach this path."""
     from . import tggroups
@@ -655,79 +404,68 @@ def handle_update(u):
     if edited: return  # private edits were ignored before; keep it that way
     from . import tggroups as _tg
     from . import tgsend as _ts
-    if _ts.parse((msg.get("text") or "")) is not None and (msg.get("from") or {}).get("id") != leadbrain.OWNER_CHAT_ID:
-        send(chat["id"], "only the owner can send into groups or channels from here.")
-        audit.record("user", "group_send_refused", "non_owner", "refused")
+    sender_id = (msg.get("from") or {}).get("id")
+    # telegram is ops only: all ai chat lives in the desktop app and the pwa
+    if sender_id != leadbrain.OWNER_CHAT_ID:
+        send(chat["id"], PRIVATE_POINTER)
+        audit.record("user", "private_pointer", "non_owner", "ok")
         return
     if _ts.parse((msg.get("text") or "")) is not None:
         kind, name, body = _ts.parse(msg["text"])
         ok, reply = _ts.queue_send(chat["id"], kind, name, body)
         send(chat["id"], reply)
         return
-    if (msg.get("text") or "").strip().startswith(("/help", "/deletemydata")):
-        if _tg.handle_private_command(chat["id"], (msg.get("from") or {}).get("id"), msg["text"].strip(),
-                                      lambda cid, t: send(cid, t)):
+    text = (msg.get("text") or "").strip()
+    if text.startswith(("/help", "/deletemydata")):
+        if _tg.handle_private_command(chat["id"], sender_id, text, lambda cid, t: send(cid, t)):
             return
-    chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
-    if not text and not msg.get("photo"): return
-    token = budget.bind(chat_id)
+    token = budget.bind(chat["id"])
     try:
-        return _handle_update_bound(u, msg, chat, chat_id, text)
+        return _handle_private_ops(chat["id"], text)
     except budget.BudgetExceeded as e:
-        try: send(chat_id, str(e))
+        try: send(chat["id"], str(e))
         except Exception: pass
     finally:
         budget.unbind(token)
 
-def _handle_update_bound(u, msg, chat, chat_id, text):
-    if text and not text.startswith("/"):
-        remember_facts(chat_id, text)
-    try:
-        leadbrain.remember_chat(chat_id)
-    except Exception as e:
-        print(f"[bot] remember_chat failed: {e}", flush=True)
-    try:
-        if msg.get("photo"):
-            handle_photo(chat_id, msg, text)
-            return
-        if text.startswith("/start"):
-            send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\n/tasks: what's on my list\n/skills: marketing playbooks i use\n\nor just talk to me normally.")
-        elif text.startswith("/script "): handle_script(chat_id, text[8:])
-        elif text.startswith("/addlead "):
-            p = [x.strip() for x in text[9:].split("|")]
-            lid = db.add_lead(p[0], p[1] if len(p) > 1 else "", p[2] if len(p) > 2 else "")
-            send(chat_id, f"✅ lead #{lid} added: {p[0]}")
-        elif text == "/leads":
-            leads = db.list_leads()
-            send(chat_id, "\n".join(f"#{l['id']} {l['name']} — {l['status']} (followup {l['next_followup'] or '—'})" for l in leads) or "no leads yet, /addlead Name | Business | Contact")
-        elif text == "/report":
-            s = db.summary()
-            send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
-        elif text == "/tasks": handle_tasks(chat_id)
-        elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
-        elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
-        elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
-        elif text == "/skills": handle_skills(chat_id)
-        elif text == "/health": send(chat_id, jobs.format_status())
-        elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
-        elif text == "/deny" or text.startswith("/deny "): handle_deny(chat_id, text[5:])
-        elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
-        elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
-        elif text.startswith("/"): send(chat_id, "unknown command, try /start")
-        else: handle_chat(chat_id, text)
-    except budget.BudgetExceeded:
-        raise
-    except Exception as e:
-        print(f"[bot] error handling update: {e}", flush=True)
-        msg = "something broke on my side, try again"
-        if "no llm provider configured" in str(e):
-            msg = "my ai brain has no api keys set on this server. add GEMINI_API_KEY and OPENROUTER_API_KEY in the render dashboard."
-        elif "cooling down" in str(e):
-            msg = "the ai providers are cooling down after errors. give it a minute and try again."
-        elif "rejected their api key" in str(e):
-            msg = "the ai providers rejected their api keys. check GEMINI_API_KEY and OPENROUTER_API_KEY in the render dashboard."
-        try: send(chat_id, msg)
-        except Exception: pass
+PRIVATE_POINTER = "all ai chat lives in the desktop app or pwa. im on telegram for group ops and alerts only"
+PRIVATE_OPS_HELP = (
+    "royce ops on telegram. chat with me in the desktop app or the pwa.\n"
+    "/start this list\n"
+    "/leads view leads\n"
+    "/addlead Name | Business | Contact\n"
+    "/report pipeline summary\n"
+    "/followup [lead id] followup drafts due\n"
+    "/tasks open items on my list\n"
+    "/approve <id> or /deny <id> answer a pending approval\n"
+    "/health job and provider status\n"
+    "/skills marketing playbooks i use\n"
+    "tell group <name>: <text> or post channel <name>: <text> send into a stored group or channel\n"
+    "/help and /deletemydata yes, the group ops above"
+)
+
+def _handle_private_ops(chat_id, text):
+    """Owner private chat: ops and admin commands only. No ai chat, no generators."""
+    if text == "/start":
+        send(chat_id, PRIVATE_OPS_HELP)
+    elif text.startswith("/addlead "):
+        p = [x.strip() for x in text[9:].split("|")]
+        lid = db.add_lead(p[0], p[1] if len(p) > 1 else "", p[2] if len(p) > 2 else "")
+        send(chat_id, f"✅ lead #{lid} added: {p[0]}")
+    elif text == "/leads":
+        leads = db.list_leads()
+        send(chat_id, "\n".join(f"#{l['id']} {l['name']}: {l['status']} (followup {l['next_followup'] or 'none'})" for l in leads) or "no leads yet, /addlead Name | Business | Contact")
+    elif text == "/report":
+        s = db.summary()
+        send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
+    elif text == "/tasks": handle_tasks(chat_id)
+    elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
+    elif text == "/skills": handle_skills(chat_id)
+    elif text == "/health": send(chat_id, jobs.format_status())
+    elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
+    elif text == "/deny" or text.startswith("/deny "): handle_deny(chat_id, text[5:])
+    elif text.startswith("/"): send(chat_id, "unknown command. ops commands are in /start. chat with me in the desktop app or the pwa.")
+    else: send(chat_id, PRIVATE_POINTER)
 
 def _on_signal(signum, frame):
     # safe stop: the poll loop exits and running planner tasks stop before their next step
@@ -742,6 +480,11 @@ def _setup_bot():
     get_env()
     me = api("getMe")
     print(f"[bot] connected as @{me['result']['username']}", flush=True)
+    # clear any old mini app menu button so it stops pointing at the removed pages
+    try:
+        api("setChatMenuButton", menu_button={"type": "default"})
+    except Exception as e:
+        print(f"[bot] could not reset menu button: {e}", flush=True)
     n = chatplan.recover_on_start()
     if n:
         print(f"[bot] marked {n} interrupted task(s) as failed (not repeated)", flush=True)
