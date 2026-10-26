@@ -35,3 +35,5 @@ services:
         sync: false
       - key: OWNER_CHAT_ID
         sync: false
+      - key: TELEGRAM_BOT_TOKEN       # bot token from BotFather: entered in the dashboard, never committed.
+        sync: false                  # The bot runs inside this web service (lifespan thread), so no worker service.

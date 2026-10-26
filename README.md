@@ -171,6 +171,23 @@ Simplest path: one Render service serves both the PWA and the API, so no CORS is
 Optional: host the static files separately (e.g. Vercel) and set ALLOWED_ORIGINS to that origin.
 Nothing here is deployed; you create the Render service and set the env vars yourself.
 
+- TELEGRAM_BOT_TOKEN (dashboard, sync false): the Telegram bot runs inside the web service process.
+  The FastAPI lifespan starts one daemon thread that long-polls getUpdates. Startup never waits for
+  Telegram: the thread checks the token and retries with backoff (5s, 15s, 60s, then every 5 min), so the
+  API comes up even if Telegram is unreachable. Shutdown sets a stop event and joins the thread (10s).
+  Kill switch: ROYCE_TELEGRAM_IN_PROCESS=0 keeps the API without the bot. Unset means on.
+- Caveats, by design:
+  - One process only. The bot and the API share sqlite files on the disk, and a Render disk attaches to
+    one service. Keep the default single uvicorn worker. Do not add --workers N or a second service
+    mounting the same disk, or two pollers would fight over getUpdates and writes would race.
+  - Zero-downtime deploys: the old and new instances can overlap briefly. Telegram answers the second
+    getUpdates with 409 conflict until the first one stops. The loop logs it and retries (3s), so the
+    bot resumes once the old process exits. Expect a few seconds of delay, not lost messages.
+  - Telegram keeps unacknowledged updates for about 24h, so a brief disconnect does not drop messages.
+  - Local run without Render: python -m app.telegram_bot still works unchanged (standalone).
+  - urllib polling is thread-safe here: each getUpdates call is stateless and the offset is local to the
+    loop. Nothing else shares the connection.
+
 ## Telegram groups (add the bot to a group)
 
 Add the bot to a group or supergroup. It stores the text of messages it can see, from the time it joined.
