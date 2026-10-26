@@ -119,3 +119,17 @@ def test_setrules_persists_and_context(env):
 def test_setrules_caps_length(env):
     tgrules.set_rules(-100, "x" * 5000)
     assert len(tgrules.get(-100)) == tgrules.MAX_LEN
+
+
+def test_recap_system_prompt_includes_rules_only_when_set(env, monkeypatch):
+    from app import tggroups as tg
+    seen = []
+    monkeypatch.setattr(tg, "chat_text", lambda messages, **k: (seen.append(messages[0]["content"]), "ok")[1])
+    tgstore.save_message(-100, 1, 42, "ana", "hello there", ts=1000.0, path=str(env["tmp"] / "store.db"))
+    monkeypatch.setattr(tgstore, "PATH", str(env["tmp"] / "store.db"))
+    sent = []
+    tg.handle_recap(-100, -100, "24", lambda cid, t: sent.append(t), now=1000.0 + 3600)
+    assert seen and "group rules" not in seen[-1]
+    tgrules.set_rules(-100, "no spam here")
+    tg.handle_recap(-100, -100, "24", lambda cid, t: sent.append(t), now=1000.0 + 3600)
+    assert "no spam here" in seen[-1]

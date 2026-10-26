@@ -174,6 +174,9 @@ def handle_recap(chat_id, group_id, arg, send, now=None):
                            for r in rows)
     system = ("Summarize this Telegram group chat for a busy agency owner. Plain text, lowercase-friendly, "
               "no headers, no bullet glyphs, no asterisks. 4 to 8 short sentences. Only use what is in the transcript.")
+    rules_line = tgrules.context_line(group_id)
+    if rules_line:
+        system += " " + rules_line + ". Note any talk in the transcript that breaks these rules."
     try:
         summary = chat_text([{"role": "system", "content": system},
                              {"role": "user", "content": transcript}], temperature=0.3, timeout=40)
