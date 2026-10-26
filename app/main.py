@@ -77,6 +77,19 @@ def api_lead_followup(lid: int):
     except Exception as e:
         return JSONResponse({"error": f"drafting failed: {str(e)[:200]}"}, status_code=502)
 
+@app.post("/api/diagnose")
+async def api_diagnose(req: Request):
+    from .doctor import diagnose
+    d = await req.json()
+    kind = d.get("kind") or ("campaign_numbers" if d.get("rows") is not None else "ad_copy")
+    data = d.get("rows") if kind == "campaign_numbers" and d.get("rows") is not None else d.get("text", "")
+    try:
+        return {"kind": kind, "teardown": diagnose(data, kind)}
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": f"diagnose failed: {str(e)[:200]}"}, status_code=502)
+
 @app.get("/api/report/summary")
 def api_report_summary(): return db.summary()
 

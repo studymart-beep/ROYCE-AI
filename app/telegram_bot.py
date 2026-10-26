@@ -377,6 +377,17 @@ def handle_chat(chat_id, text):
         hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[generated ad package]"}]
         del hist[:-HIST_MAX]
         return
+    if re.search(r"\b(check|pull|show|review)\b.*\bcampaigns?\b", low) or re.search(r"\bcheck my ads\b", low):
+        handle_doctor(chat_id, "")
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent ad teardown]"}]
+        del hist[:-HIST_MAX]
+        return
+    from . import doctor as _doc
+    if _doc.wants_diagnose(text):
+        handle_doctor(chat_id, "" if re.search(r"\b(this|my)\b.*\bcampaigns?\b", low) and not re.search(r"\d", text) else text)
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent ad teardown]"}]
+        del hist[:-HIST_MAX]
+        return
     if reply is None:
         cls = classify(text)
         if cls.get("is_task") is True:
@@ -402,6 +413,32 @@ def handle_followup(chat_id, arg):
     api("sendChatAction", chat_id=chat_id, action="typing")
     draft = leadbrain.draft_followup(lead)
     send(chat_id, f"follow-up for #{lead['id']} {lead['name']}:\n\n{draft}\n\nwant me to tweak it or add a note?")
+
+
+def handle_doctor(chat_id, arg):
+    from . import doctor
+    arg = (arg or "").strip()
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    try:
+        if not arg:
+            names = collectors.configured_names()
+            if not names:
+                send(chat_id, "usage: /doctor <paste ad copy or campaign numbers>\nor connect an ad platform and say 'check my campaigns'.")
+                return
+            rows, errors = collectors.fetch_all("last_7d")
+            if not rows:
+                send(chat_id, "pulled from " + ", ".join(names) + " but no campaign rows came back for last_7d.")
+                return
+            kind, body = "campaign_numbers", rows
+        else:
+            kind = "campaign_numbers" if re.search(r"\d", arg) and re.search(r"\b(ctr|cpc|spend|impressions|clicks|roas)\b", arg, re.I) else "ad_copy"
+            body = arg
+        send(chat_id, "teardown:\n\n" + doctor.diagnose(body, kind))
+    except ValueError as e:
+        send(chat_id, str(e))
+    except Exception as e:
+        print("[bot] doctor error", e)
+        send(chat_id, "couldn't get a teardown right now (the llm is busy). try again in a minute.")
 
 
 def handle_update(u):
@@ -433,6 +470,7 @@ def handle_update(u):
             send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
         elif text == "/tasks": handle_tasks(chat_id)
         elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
+        elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)

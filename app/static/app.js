@@ -134,6 +134,7 @@ else if(page==='reporting'){
       const r = await fetch('/api/report/all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preset:'last_7d'})});
       const j = await r.json();
       if(!r.ok){ body.innerHTML = `<section class=card><div class=empty>${esc(j.error||'no report yet')}. connect an ad platform on the connectors page.</div></section>`; return; }
+      window.lastRows = j.rows || [];
       document.getElementById('rep-meta').textContent = `from ${(j.configured||[]).join(', ') || 'connected platforms'}`;
       const errs = (j.errors||[]).map(e=>`<p class=sub style="padding:0 6px 10px">${esc(e.collector)}: ${esc(e.error)}</p>`).join('');
       const summary = j.summary ? `<section class=card><div class=summary>${esc(j.summary)}</div></section>` : '';
@@ -146,9 +147,21 @@ else if(page==='reporting'){
           <div class=kv><span>ctr</span><b>${esc(r.ctr)}%</b></div>
           <div class=kv><span>cpc</span><b>${esc(r.cpc)}</b></div>
         </section>`).join('');
-      body.innerHTML = summary + (rows || '<section class=card><div class=empty>no campaign rows for this period</div></section>') + errs;
+      const diag = (j.rows||[]).length ? `<section class=card><div class=pad><button class="txt" type=button id=diagnose>diagnose</button></div><div id=diag-out class=pad></div></section>` : '';
+      body.innerHTML = summary + (rows || '<section class=card><div class=empty>no campaign rows for this period</div></section>') + diag + errs;
+      const dbtn = document.getElementById('diagnose');
+      if(dbtn) dbtn.onclick = async () => {
+        const out = document.getElementById('diag-out'); out.textContent = 'tearing it down…'; dbtn.disabled = true;
+        try{
+          const d = await fetch('/api/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'campaign_numbers',rows:window.lastRows})});
+          const dj = await d.json();
+          out.innerHTML = d.ok ? `<div class=summary>${esc(dj.teardown)}</div>` : esc(dj.error||'could not diagnose');
+        }catch(e){ out.textContent = 'could not reach the diagnosis, try again'; }
+        dbtn.disabled = false;
+      };
     }catch(e){ body.innerHTML = '<section class=card><div class=empty>could not load the report, hit refresh to retry</div></section>'; }
   };
+
   document.getElementById('refresh').onclick = load;
   load();
 }
