@@ -170,3 +170,21 @@ Nothing is deployed. render.yaml describes one Render web service that serves th
 Simplest path: one Render service serves both the PWA and the API, so no CORS is needed.
 Optional: host the static files separately (e.g. Vercel) and set ALLOWED_ORIGINS to that origin.
 Nothing here is deployed; you create the Render service and set the env vars yourself.
+
+## Telegram groups (add the bot to a group)
+
+Add the bot to a group or supergroup. It stores the text of messages it can see, from the time it joined.
+Group commands: /search <keyword>, /recap [hours] (default 24, max 168), /help, /deletemydata yes.
+Admin-only commands (checked live with Telegram, never trusted from chat claims): /setwelcome <text>,
+/welcome on|off, /welcomestatus, /setretention <hours>, /groupconfig, /flags, /flag <id> safe|dismiss|escalate,
+/allowadd <user id>, /allowremove <user id>.
+
+Moderation only flags messages for admin review (suspicious links, flooding, ads). It never bans, deletes or
+restricts anyone. Admins and allowlisted users are not checked for flood or ads, but links are still checked.
+
+What the bot cannot do, by design of the Telegram bot API:
+it cannot read the owner's private chats with other people, and it cannot read messages in groups it is not in.
+It only sees its own private chats and the groups it is a member of. In groups it stores text only, not photos,
+files or service events. Edits update the stored text. Stored messages expire after the group's retention
+(default 720 hours) and anyone can delete their own stored messages with /deletemydata yes.
+Deletions and flags are audited by count and id only, never by content.

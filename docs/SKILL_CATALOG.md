@@ -71,3 +71,17 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 - Persistence: ROYCE_DATA_DIR (app/paths.py). Implemented.
 - CORS: ALLOWED_ORIGINS (main.py). Implemented, tested for allowed and disallowed origins.
 - Deployment: render.yaml added. NOTHING DEPLOYED.
+
+## Telegram groups (phase: group chats)
+
+| Capability | Status | Maps to | Note |
+|---|---|---|---|
+| Group message store | implemented (fake-tested) | app/tgstore.py, app/tggroups.py | text only, sqlite, idempotent on (group, message), edits update in place with edited=1, per-group retention (default 720h), cleanup every 30 min from the bot loop. Commands are never stored. |
+| /search and /recap | implemented (fake-tested) | app/tggroups.py | /search keyword over stored text. /recap [hours] (default 24, max 168) summarizes with chat_text; says "ive only been in this group since X" when the store is young; honest when empty. |
+| Welcomes | implemented (fake-tested) | app/tgwelcomes.py, app/tgadmin.py | new_chat_members triggers the welcome. Admin-only /setwelcome, /welcome on|off, /welcomestatus. Config in tgwelcomes.json. |
+| Admin verification | implemented (fake-tested) | app/tgadmin.py | getChatMember (creator or administrator). Cached 10 min per (chat, user). Failed lookups are not admin and not cached. Chat claims are ignored. |
+| Moderation flags | implemented (fake-tested) | app/tgmod.py, app/tggroups.py | review queue only. link_suspicious (shorteners, .tk/.xyz/.top, IP hosts, punycode), flood (>5 msgs in 60s, or same text 3x in 10 min), ads (promo words plus link or buy/join/earn). Deduped per (group, message, category). /flags, /flag <id> safe|dismiss|escalate (admin). Never bans or deletes. |
+| Allowlist | implemented (fake-tested) | app/tgallow.py | per-group user ids, managed by verified admins or the owner. /allowadd, /allowremove. Exempts from flood and ads flags only (links are still checked). protect_admins on. |
+| Retention and deletion | implemented (fake-tested) | app/tggroups.py, app/tgstore.py | /setretention <hours> (admin). /deletemydata yes (own messages in that group, or in every group from private chat). /groupconfig (admin). Audit logs counts and ids, never content. |
+| Honest limits | documented | README.md, /help | the bot api cannot read the owner's private chats with others. The bot sees only its own private chats and groups it is a member of. |
+| Live group test | not run | none | no test group was available. The live check covered the bot start, the allowed_updates list and the poller only. |
