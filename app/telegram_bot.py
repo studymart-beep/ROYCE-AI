@@ -90,6 +90,9 @@ def get_env():
 def get_updates(offset=None):
     url = API + "/getUpdates?timeout=50"
     if offset: url += f"&offset={offset}"
+    # message carries group text and new_chat_members (a field of a message, not its own update type);
+    # edited_message carries edits of group text
+    url += "&allowed_updates=" + urllib.parse.quote(json.dumps(["message", "edited_message"]))
     with urllib.request.urlopen(url, timeout=70) as r:
         return json.loads(r.read())
 
@@ -597,10 +600,44 @@ def remember_facts(chat_id, text):
     except Exception as e:
         print(f"[bot] memory save failed: {e}", flush=True)
 
+def handle_group_update(msg, chat, edited):
+    """Groups and supergroups: store text (idempotent, edits in place) and answer /search and /recap."""
+    from . import tggroups
+    try:
+        tggroups.store_group_message(msg, edited=edited)
+    except Exception as e:
+        print(f"[bot] group store failed: {e}", flush=True)
+    text = (msg.get("text") or "").strip()
+    if edited or not text.startswith("/"):
+        return
+    cmd, _, arg = text.partition(" ")
+    cmd = cmd.split("@")[0].lower()
+    if cmd not in ("/search", "/recap"):
+        return
+    token = budget.bind(chat["id"])
+    try:
+        if cmd == "/search":
+            tggroups.handle_search(chat["id"], chat["id"], arg, send)
+        else:
+            tggroups.handle_recap(chat["id"], chat["id"], arg, send)
+    except budget.BudgetExceeded as e:
+        try: send(chat["id"], str(e))
+        except Exception: pass
+    except Exception as e:
+        print(f"[bot] group command error: {e}", flush=True)
+    finally:
+        budget.unbind(token)
+
 def handle_update(u):
-    msg = u.get("message") or {}
+    # edited_message carries edits of earlier messages; treat them as the same message id
+    edited = "edited_message" in u
+    msg = u.get("message") or u.get("edited_message") or {}
     chat = msg.get("chat") or {}
+    from . import tggroups
+    if tggroups.is_group(chat):
+        return handle_group_update(msg, chat, edited)
     if chat.get("type") != "private": return
+    if edited: return  # private edits were ignored before; keep it that way
     chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
     if not text and not msg.get("photo"): return
     token = budget.bind(chat_id)
@@ -676,6 +713,7 @@ def main():
     audit.record("bot", "bot_started", "telegram", "ok")
     offset = None
     last_check = 0
+    last_cleanup = 0
     while True:
         try:
             data = get_updates(offset)
@@ -697,6 +735,15 @@ def main():
                 send(nudge[0], nudge[1])
         except Exception as e:
             print(f"[bot] nudge check error: {e}", flush=True)
+        if time.time() - last_cleanup >= tgstore.CLEANUP_EVERY:
+            last_cleanup = time.time()
+            try:
+                removed = tgstore.cleanup()
+                if removed:
+                    # counts only: deleted message content is never audited
+                    audit.record("bot", "group_messages_expired", "telegram", f"rows={sum(removed.values())}")
+            except Exception as e:
+                print(f"[bot] group cleanup error: {e}", flush=True)
 
 if __name__ == "__main__":
     main()
