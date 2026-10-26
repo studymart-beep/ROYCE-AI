@@ -207,7 +207,7 @@ def test_status_shape_and_no_keys(client, monkeypatch):
     from app.agent import validate
     monkeypatch.setattr(validate, "check_all", lambda **kw: {p: {"state": "not_configured", "detail": "", "checked_at": 0}
                                                               for p in validate.PROVIDERS})
-    monkeypatch.setenv("GEMINI_API_KEY", "AIzaSECRETVALUE123456789012345678")
+    monkeypatch.setenv("GEMINI_API_KEY", "FAKE-TEST-KEY-NOT-REAL")
     r = client.get("/api/ws/status", headers=OWNER)
     assert r.status_code == 200
     body = r.json()
