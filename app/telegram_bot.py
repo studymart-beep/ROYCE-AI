@@ -719,7 +719,14 @@ def _handle_update_bound(u, msg, chat, chat_id, text):
         raise
     except Exception as e:
         print(f"[bot] error handling update: {e}", flush=True)
-        try: send(chat_id, "something broke on my side, try again")
+        msg = "something broke on my side, try again"
+        if "no llm provider configured" in str(e):
+            msg = "my ai brain has no api keys set on this server. add GEMINI_API_KEY and OPENROUTER_API_KEY in the render dashboard."
+        elif "cooling down" in str(e):
+            msg = "the ai providers are cooling down after errors. give it a minute and try again."
+        elif "rejected their api key" in str(e):
+            msg = "the ai providers rejected their api keys. check GEMINI_API_KEY and OPENROUTER_API_KEY in the render dashboard."
+        try: send(chat_id, msg)
         except Exception: pass
 
 def _on_signal(signum, frame):
