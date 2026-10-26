@@ -8,6 +8,7 @@ diagnose(text, kind) with kind in ("ad_copy", "campaign_numbers").
 Uses app/llm.py chat_text (gemini first, openrouter failover).
 """
 from .llm import chat_text
+from . import skills
 
 DOCTOR_SYSTEM = (
     "You are a ruthless senior media buyer. Tear down this ad or campaign data: "
@@ -50,7 +51,8 @@ def diagnose(text, kind):
         user = (f"CAMPAIGN NUMBERS (use only these numbers, do not invent any):\n{body}\n\n"
                 "Tear it down: which campaign is bleeding money, what the CTR and CPC say, "
                 "what to fix, and 3 specific changes.")
-    return chat_text([{"role": "system", "content": DOCTOR_SYSTEM}, {"role": "user", "content": user}],
+    kind_key = "doctor_numbers" if kind == "campaign_numbers" else "doctor"
+    return chat_text([{"role": "system", "content": DOCTOR_SYSTEM + skills.engine_skill(kind_key)}, {"role": "user", "content": user}],
                      temperature=0.4, timeout=40).strip()
 
 

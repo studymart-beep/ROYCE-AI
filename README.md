@@ -90,3 +90,8 @@ Daily nudges: the bot checks at most once an hour. If any open lead has a next_f
 ## Voice replies (tts)
 
 /voice <text> or chat like "reply in voice" / "say this in voice" makes a voice note (ogg opus, sendVoice). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
+
+## Skills (marketing playbooks)
+
+Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-growth, funnel-design, reporting-storytelling, negotiation-closing). Each has a front matter block with name and description. app/skills.py lists them (list_skills), reads one (get_skill), and picks the most relevant ones for a message by whole-word keyword match (select_skills). Chat injects at most 2 playbooks per turn (skill_block). The /followup, /doctor and /content engines each get their default playbook (engine_skill): followup uses negotiation-closing, doctor uses direct-response (reporting-storytelling for campaign numbers), content uses social-growth. /skills in the bot lists the playbooks with one-line descriptions. To add one, drop a new .md file in skills/ with name and description front matter, and add its keywords to KEYWORDS in app/skills.py.
+

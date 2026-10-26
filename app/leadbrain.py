@@ -9,6 +9,7 @@ import datetime, json, os
 from zoneinfo import ZoneInfo
 from .llm import chat_text
 from . import db
+from . import skills
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_PATH = os.path.join(BASE, "nudge_state.json")
@@ -38,7 +39,7 @@ def draft_followup(lead, context=""):
     if context:
         lines.append(f"Extra notes from the user: {context}")
     user = "\n".join(lines) + "\n\nWrite the follow-up message now."
-    text = chat_text([{"role": "system", "content": FOLLOWUP_SYSTEM},
+    text = chat_text([{"role": "system", "content": FOLLOWUP_SYSTEM + skills.engine_skill("followup")},
                       {"role": "user", "content": user}], temperature=0.7, timeout=30)
     return text.strip().strip('"').strip()
 

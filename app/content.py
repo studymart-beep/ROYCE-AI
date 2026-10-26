@@ -9,6 +9,7 @@ import re
 
 from .llm import chat_text
 from . import workstore
+from . import skills
 
 CONTENT_SYSTEM = (
     "You are Royce AI for Royce Marketing Agency, a content strategist for Lagos brands. "
@@ -58,7 +59,7 @@ def weekly_calendar(client, industry, platform, source="chat"):
     if not client or not industry or not platform:
         raise ValueError("need client, industry and platform")
     user = f"Client: {client}\nIndustry: {industry}\nPlatform: {platform}\nMake the 7-day calendar."
-    raw = chat_text([{"role": "system", "content": CONTENT_SYSTEM}, {"role": "user", "content": user}],
+    raw = chat_text([{"role": "system", "content": CONTENT_SYSTEM + skills.engine_skill("content")}, {"role": "user", "content": user}],
                     temperature=0.7, timeout=45)
     cal = _validate(_parse_json(raw))
     workstore.add_content_calendar(client, industry, platform, cal, source=source)

@@ -3,6 +3,7 @@ from .llm import chat_text, chat_vision, generate_script_package
 from . import imagegen
 from . import db, collectors, workstore, tasks
 from . import leadbrain
+from . import skills
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -204,7 +205,7 @@ def handle_inbox(chat_id):
         send(chat_id, str(e))
 
 def do_chat(text, hist=None):
-    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + skills.skill_block(text)
     msgs = [{"role": "system", "content": sysmsg}] + (hist[-HIST_MAX:] if hist else []) + [{"role": "user", "content": text}]
     return chat_text(msgs, timeout=40)
 
@@ -426,7 +427,7 @@ def handle_chat(chat_id, text):
             hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
             del hist[:-HIST_MAX]
             return
-        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + skills.skill_block(text)
         reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
     hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
     del hist[:-HIST_MAX]
@@ -513,6 +514,14 @@ def handle_voice(chat_id, text):
         send(chat_id, "made the voice but telegram rejected the upload. try again in a minute.")
 
 
+def handle_skills(chat_id):
+    lines = ["marketing skills i use in answers (max 2 per reply, picked by what you ask):"]
+    for s in skills.list_skills():
+        lines.append(f"• {s['name']}: {s['description']}")
+    lines.append("\nask about hooks, brand, posts, funnels, reports or pricing and i pull the right one.")
+    send(chat_id, "\n".join(lines))
+
+
 def handle_content_chat(chat_id, client):
     send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
 
@@ -532,7 +541,7 @@ def handle_update(u):
             handle_photo(chat_id, msg, text)
             return
         if text.startswith("/start"):
-            send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\n/tasks: what's on my list\n\nor just talk to me normally.")
+            send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\n/tasks: what's on my list\n/skills: marketing playbooks i use\n\nor just talk to me normally.")
         elif text.startswith("/script "): handle_script(chat_id, text[8:])
         elif text.startswith("/addlead "):
             p = [x.strip() for x in text[9:].split("|")]
@@ -548,6 +557,7 @@ def handle_update(u):
         elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
         elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
         elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
+        elif text == "/skills": handle_skills(chat_id)
         elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
