@@ -1,82 +1,99 @@
-# Royce AI, Windows desktop client (Tauri v2)
+# Royce AI, Windows desktop app (Tauri v2)
 
-This is a native Windows app (MSI and NSIS installer) that opens your deployed Royce AI backend
-workspace in its own window. It is a thin shell: all AI, data and secrets stay on the backend. The app
-holds no API keys and no owner token.
+A native Windows app that opens your Royce AI workspace (the production backend at
+https://royce-ai.onrender.com/workspace) in its own window, not a browser tab. It is a thin shell:
+all AI, routing, data and secrets stay on the backend. The app holds no API keys and no owner token.
 
-Status: the project is complete and validated for config and wiring, but the Windows .exe/.msi has
-NOT been built yet. Tauri Windows builds must run on Windows. This repo was prepared on Linux, so the
-installer has never been produced here.
+Status (honest): the Linux build and window load are verified on the build machine (see section 7).
+The Windows installer (.msi and setup .exe) has NOT been built yet. MSI and NSIS bundling only runs
+on Windows, so no .exe exists until you build it on your Windows 10 laptop with the commands below.
 
-## 1. Prerequisites (Windows 10 or 11, 64-bit)
+## 1. Prerequisites (Windows 10, 64-bit)
 
-1. Microsoft C++ Build Tools (needed by the Rust MSVC toolchain).
-   Install "Build Tools for Visual Studio 2022" from https://visualstudio.microsoft.com/visual-cpp-build-tools/
-   and tick the workload "Desktop development with C++" (MSVC v143 and the Windows 11 SDK).
-2. WebView2 runtime. Windows 11 has it. On Windows 10, install the "Evergreen Bootstrapper" from
-   https://developer.microsoft.com/microsoft-edge/webview2/ . The installer does not bundle WebView2; Windows 10 machines need the bootstrapper first.
-3. Rust (stable, MSVC toolchain). Install from https://rustup.rs/ , choose the default
-   "x86_64-pc-windows-msvc" host. Then open a new terminal and check: `rustc --version` and `cargo --version`.
-4. Tauri CLI, installed once with Rust: `cargo install tauri-cli --version "^2" --locked`.
-   Node.js is not needed, because the window loads your backend URL and the frontend folder is only a notice page.
+1. Microsoft C++ Build Tools 2022. Install "Build Tools for Visual Studio 2022" from
+   https://visualstudio.microsoft.com/visual-cpp-build-tools/ and tick the workload
+   "Desktop development with C++" (MSVC v143 and the Windows 10 SDK).
+2. WebView2 runtime. Windows 10 does not always have it. Install the "Evergreen Bootstrapper" from
+   https://developer.microsoft.com/microsoft-edge/webview2/ . The installer does not bundle WebView2.
+3. Rust with the MSVC toolchain. Install from https://rustup.rs/ and keep the default host
+   `x86_64-pc-windows-msvc`. Open a new PowerShell window and check: `rustc --version` and `cargo --version`.
+4. Tauri CLI v2, installed once:
 
-## 2. Point the app at your backend
+       cargo install tauri-cli --version "^2" --locked
 
-The backend is the one deployed Render service (or any HTTPS host that runs `uvicorn app.main:app`).
-The URL must be https. Plain http is allowed only for localhost (local testing).
+Node.js is not needed. The frontend folder is only an offline notice page.
 
-Set ROYCE_BACKEND_URL to the base URL, with no path and no trailing slash, for example
-`https://royce-ai.onrender.com`. Do not include /workspace (the app adds it).
+## 2. Backend URL
 
-PowerShell, for the current window:
+The app loads `<backend>/workspace`. The default backend is the production service
+`https://royce-ai.onrender.com`, so you do not need to set anything to build the normal app.
 
-    $env:ROYCE_BACKEND_URL = "https://YOUR-BACKEND-HOST"
+Set `ROYCE_BACKEND_URL` only to point at a different backend (for example a dev server). Use the
+base URL with no path and no trailing slash. Plain http is allowed only for localhost.
 
-The value is read at build time and also at launch, so set it before running either command below.
+    $env:ROYCE_BACKEND_URL = "https://royce-ai.onrender.com"
+
+Optional. The default already is production. Set it before the build (it is compiled in) or before
+launching (it overrides the compiled value).
 
 ## 3. Build the Windows installer
 
-Run these in PowerShell from the repo root (the folder that contains desktop\):
+Run in PowerShell from the repo root (the folder that contains `desktop\`):
 
     cd desktop\src-tauri
-    $env:ROYCE_BACKEND_URL = "https://YOUR-BACKEND-HOST"
+    $env:ROYCE_BACKEND_URL = "https://royce-ai.onrender.com"   # optional, this is the default
     cargo tauri build
 
-Output (under desktop\src-tauri\target\release\bundle\):
+Outputs, under `desktop\src-tauri\target\release\bundle\`:
 
-- msi\Royce AI_1.0.0_x64_en-US.msi  (Windows Installer package)
-- nsis\Royce AI_1.0.0_x64-setup.exe  (setup .exe)
+- `msi\*.msi` (Windows Installer package, for example `msi\Royce AI_1.0.0_x64_en-US.msi`)
+- `nsis\*-setup.exe` (setup executable, for example `nsis\Royce AI_1.0.0_x64-setup.exe`)
 
-Use either one. The .msi is good for managed installs, the setup .exe is the usual download.
+Use either one. The .msi suits managed installs. The setup .exe is the usual download.
 
-To check the app before packaging: `cargo tauri dev` (opens the window, then close it).
+To check the window before packaging: `cargo tauri dev` (opens the app; close it when done).
 
-## 4. Install and launch
+## 4. Install and first launch
 
-Double-click the .msi or the setup .exe, then launch "Royce AI" from the Start menu. The window
-opens at 1280x800 with a 1024x640 minimum and loads your backend /workspace. If ROYCE_BACKEND_URL
-was missing at build time, the window shows a notice page saying the backend is not connected yet.
+1. Double-click the `.msi` (or the `-setup.exe`) and finish the wizard.
+2. Open the Start menu and launch "Royce AI". To keep it on the taskbar, right-click the running or
+   Start-menu entry and choose "Pin to taskbar".
+3. The first launch shows the sign-in token prompt of the workspace. Enter your owner token there.
+   The token is the `WORKSPACE_TOKEN` value from your Render dashboard (service royce-ai, Environment).
+   Type it into the app. It is never put in the frontend code, the build, or the installer.
+4. The window opens at 1280x800 with a 1024x640 minimum size.
 
-## 5. Keep the app pointed at the right backend
+If `ROYCE_BACKEND_URL` is set to an invalid or non-https value, the window shows a "not connected"
+notice page instead of the workspace.
 
-Rebuild the installer whenever the backend URL changes (the URL is compiled in, and can also be
-overridden at launch with the same environment variable). The app also loads the server's own
-/workspace, so server updates reach the desktop app with no reinstall.
+## 5. Updates
+
+The app loads the server's `/workspace`, so server updates reach the desktop app with no reinstall.
+Rebuild the installer only when the desktop code changes or you need a different backend URL.
+The URL is compiled in, and the same environment variable can override it at launch.
 
 ## 6. Notes
 
-- Icon: src-tauri\icons (generated by scripts\make_icons.py, forest square with gold arrow).
-- Product name "Royce AI", identifier com.royce.ai.desktop. Change the identifier before you
-  publish, because it names the install location.
+- Icon: `src-tauri\icons`, forest green square with a gold arrow (generated by `scripts\make_icons.py`).
+  Brand colors: ivory #F7F3E9, orange #F36B21, forest #0D3B2E, gold accent.
+- Window title "Royce AI". Product name "Royce AI", identifier `com.royce.ai.desktop`. Change the identifier
+  before you publish, because it names the install location.
 - Code signing: the installer is unsigned. Windows SmartScreen will warn until you sign it with a
-  code-signing certificate (not set up here).
-- The desktop app does not replace the phone app at /m. Phones use the PWA (see the main README).
+  code-signing certificate (not set up).
+- The desktop app does not replace the phone app at `/m`. Phones use the PWA (see the main README).
+
+## 7. What was verified on Linux (build machine)
+
+- `cargo tauri build --no-bundle` with `ROYCE_BACKEND_URL=https://royce-ai.onrender.com` compiled the
+  native app. The bundles (msi, nsis) were NOT produced there, because they are Windows-only.
+- Run under Xvfb, the native window loaded the production `/workspace` (token prompt visible). The
+  screenshot is proof of the load only. No token was entered.
 
 ## Files
 
-- desktop\src-tauri\tauri.conf.json  product name, version, bundle targets, icons, CSP
-- desktop\src-tauri\Cargo.toml       Rust dependencies (tauri 2)
-- desktop\src-tauri\build.rs         tauri-build hook
-- desktop\src-tauri\src\main.rs      window (1280x800, min 1024x640) and backend URL loading
-- desktop\src-tauri\icons\           app icons (png set and icon.ico)
-- desktop\frontend\index.html         offline notice shown if no backend URL is set
+- `desktop\src-tauri\tauri.conf.json`  product name, version, bundle targets, icons, CSP
+- `desktop\src-tauri\Cargo.toml`       Rust dependencies (tauri 2)
+- `desktop\src-tauri\build.rs`         tauri-build hook
+- `desktop\src-tauri\src\main.rs`      window (1280x800, min 1024x640) and backend URL loading
+- `desktop\src-tauri\icons\`           app icons (png set and icon.ico)
+- `desktop\frontend\index.html`        offline notice shown if the backend URL is invalid
