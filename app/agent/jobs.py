@@ -40,10 +40,13 @@ def _now():
 def self_check(health_path=None):
     """Run the lightweight checks and return the result dict (also written to health.json)."""
     checks = {}
+    from . import validate
     providers = {}
-    for pid in PROVIDERS:
-        providers[pid] = {"configured": router.is_configured(pid), "healthy": router.is_healthy(pid)}
-    checks["llm_providers"] = {"ok": any(p["configured"] for p in providers.values()), "detail": providers}
+    for pid, st in validate.check_all(force=False).items():
+        providers[pid] = {"state": st["state"], "configured": st["state"] != "not_configured"}
+    # ok = at least one provider is validated or merely inconclusive (not invalid, not missing)
+    checks["llm_providers"] = {"ok": any(p["state"] in ("validated", "unavailable") for p in providers.values()),
+                               "detail": providers}
 
     try:
         conn = sqlite3.connect(f"file:{tools.DB_PATH}?mode=ro", uri=True, timeout=5)
@@ -141,16 +144,19 @@ def stop():
     _STOP.set()
 
 
-def format_status(result=None):
-    """Plain text for the /health bot command. No keys, no raw dumps."""
+def format_status(result=None, probe=None):
+    """Plain text for the /health bot command. No keys, no raw dumps.
+
+    Provider lines show the real validation state (configured / validated / unavailable /
+    invalid). probe: optional callable returning validate.check_all() results (tests inject it).
+    """
+    from . import validate
     r = result if result is not None else latest()
-    ps = provider_status()
+    states = (probe or validate.check_all)()
     lines = []
     for pid in PROVIDERS:
-        conf = bool(ps.get(pid, {}).get("configured"))
-        healthy = router.is_healthy(pid) if conf else False
-        state = "configured, healthy" if conf and healthy else ("configured, recent errors" if conf else "not configured")
-        lines.append(f"{pid}: {state}")
+        st = states.get(pid) or {}
+        lines.append(f"{pid}: {st.get('detail') or 'not checked'}")
     if not r:
         lines.append("self-check: not run yet (first one runs within a minute of start, then hourly)")
         return "\n".join(lines)

@@ -5,6 +5,16 @@ import pytest
 from app.agent import audit, jobs, tools
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    # provider validation must never hit the network in unit tests
+    from app.agent import validate
+    validate.reset()
+    monkeypatch.setattr(validate, "_request", lambda pid, key: 200)
+    yield
+    validate.reset()
+
+
 @pytest.fixture
 def paths(tmp_path, monkeypatch):
     monkeypatch.setattr(audit, "PATH", str(tmp_path / "audit.jsonl"))
