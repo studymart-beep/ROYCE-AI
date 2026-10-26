@@ -231,3 +231,74 @@ def status():
             "budget": {"used_this_hour": budget.used(WEB_BUCKET), "remaining_this_hour": budget.remaining(WEB_BUCKET)},
             "collectors": {k: {"label": v.get("label"), "configured": bool(v.get("configured"))}
                            for k, v in cs.items()}}
+
+
+# --- bots, routines (added with the workspace rebuild) ----------------------------------------
+
+class BotIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    template: str | None = Field(default=None, max_length=60)
+
+
+@router.get("/bots/templates", dependencies=[Depends(require_owner)])
+def bot_templates():
+    from . import bots
+    return {"templates": bots.templates(), "categories": bots.CATEGORIES}
+
+
+@router.get("/bots", dependencies=[Depends(require_owner)])
+def list_bots():
+    from . import bots
+    return {"bots": bots.list_bots()}
+
+
+@router.post("/bots", dependencies=[Depends(require_owner)])
+def create_bot(body: BotIn):
+    from . import bots
+    try:
+        bot = bots.create(body.name, body.template)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    audit.record("owner", "bot_created", bot["id"], "ok")
+    return bot
+
+
+@router.delete("/bots/{bot_id}", dependencies=[Depends(require_owner)])
+def delete_bot(bot_id: str):
+    from . import bots
+    if not bots.delete(bot_id):
+        raise HTTPException(404, "no such bot")
+    audit.record("owner", "bot_deleted", bot_id, "ok")
+    return {"ok": True}
+
+
+class RoutineIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    schedule: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=500)
+
+
+@router.get("/routines", dependencies=[Depends(require_owner)])
+def list_routines():
+    from . import routines
+    return {"system": routines.system_jobs(), "user": routines.list_user()}
+
+
+@router.post("/routines", dependencies=[Depends(require_owner)])
+def create_routine(body: RoutineIn):
+    from . import routines
+    try:
+        rec = routines.create(body.name, body.schedule, body.note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    audit.record("owner", "routine_created", rec["id"], "ok")
+    return rec
+
+
+@router.delete("/routines/{rid}", dependencies=[Depends(require_owner)])
+def delete_routine(rid: str):
+    from . import routines
+    if not routines.delete(rid):
+        raise HTTPException(404, "no such routine")
+    audit.record("owner", "routine_deleted", rid, "ok")
+    return {"ok": True}
