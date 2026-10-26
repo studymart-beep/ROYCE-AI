@@ -216,9 +216,11 @@ def test_status_shape_and_no_keys(client, monkeypatch):
 
 
 def test_chat_passes_bot_id_and_scopes_sessions_per_bot(client, monkeypatch, tmp_path):
-    from app import bots
+    from app import bots, llm
     monkeypatch.setattr(bots, "PATH", str(tmp_path / "bots.json"))
     _no_llm(monkeypatch)
+    # the bot-scoped path calls llm.chat_text directly (not workspace_api._llm_chat): stub it so no network call
+    monkeypatch.setattr(llm, "chat_text", lambda msgs, **kw: "hello from royce")
     a = bots.create("Lagos writer")
     b = bots.create("Hook bot")
     r = client.post("/api/ws/chat", json={"message": "hi bot", "bot_id": a["id"]})
