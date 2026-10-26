@@ -3,6 +3,13 @@ from app.agent import router
 
 
 @pytest.fixture(autouse=True)
+def one_model_cascade(monkeypatch):
+    # these tests cover provider-level failover; pin gemini to one model so the cascade is a no-op here
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-a")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def clean():
     router.reset_health()
     yield
@@ -38,7 +45,7 @@ def test_call_fails_over_to_second_provider():
         return "hello from openrouter"
     out = router.call(fn, capability="chat", preferred="gemini", configured=both, log=lambda *a: None)
     assert out == "hello from openrouter"
-    assert calls == ["gemini", "openrouter"]
+    assert calls == ["gemini", "openrouter"]  # one-model cascade: gemini once, then openrouter
 
 
 def test_failed_provider_is_demoted_after_error():

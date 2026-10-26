@@ -5,6 +5,13 @@ from app.agent import router, budget
 
 
 @pytest.fixture(autouse=True)
+def one_model_cascade(monkeypatch):
+    # these tests cover provider-level failover; pin gemini to one model so the cascade is a no-op here
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-a")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def clean():
     router.reset_health()
     budget.reset()

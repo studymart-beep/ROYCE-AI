@@ -251,6 +251,11 @@ def status():
         if pid in providers:
             providers[pid]["state"] = res.get("state")
             providers[pid]["state_text"] = validate.STATE_TEXT.get(res.get("state"), "")
+    from .agent import router
+    for pid in providers:
+        ms = router.model_states(pid)
+        if ms:
+            providers[pid]["models"] = ms  # real cascade order + router health per model (gemini only)
     cs = collectors.status()
     return {"providers": providers, "default_provider": provider_status().get("default"),
             "budget": {"used_this_hour": budget.used(WEB_BUCKET), "remaining_this_hour": budget.remaining(WEB_BUCKET)},

@@ -532,6 +532,12 @@
           o.value = k;
           if (k === def) o.selected = true;
           sel.appendChild(o);
+          (providers[k].models || []).forEach((m) => {
+            const mo = el("option", "", "  " + k + " / " + m.model + (m.healthy ? "" : " (cooling)"));
+            mo.value = k;
+            mo.disabled = true;
+            sel.appendChild(mo);
+          });
         });
         sel.onchange = async () => {
           try {
@@ -877,8 +883,23 @@
         row.appendChild(el("div", "", k + " · " + (p.model || "")));
         row.appendChild(chip(p.configured ? (p.state_text || p.state || "configured") : "no key", p.configured ? "on" : "warn"));
         card.appendChild(row);
+        (p.models || []).forEach((m, i) => {
+          const mr = el("div", "row");
+          mr.style.justifyContent = "space-between";
+          mr.style.padding = "6px 0 6px 18px";
+          mr.style.borderBottom = "1px solid var(--hair)";
+          const used = m.last_used ? " · last used" : "";
+          const tried = m.tried ? "" : " · not tried yet";
+          mr.appendChild(el("div", "small", (i + 1) + ". " + m.model + used + tried));
+          let label = m.healthy ? "healthy" : "cooling down " + m.cooldown_s + "s";
+          mr.appendChild(chip(label, m.healthy ? "on" : "warn"));
+          card.appendChild(mr);
+        });
       });
       pane.appendChild(card);
+      const cascadeNote = el("div", "small muted", "Gemini tries these models in order on a timeout, 429, 503 or network error, then falls back to the next provider. Health and last-used are from the live router state.");
+      cascadeNote.style.marginTop = "8px";
+      pane.appendChild(cascadeNote);
       const r = el("div", "row");
       r.style.marginTop = "12px";
       const sel = el("select", "select");
