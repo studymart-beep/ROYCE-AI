@@ -138,3 +138,32 @@ textarea.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px
 .bot-pick{display:inline-flex;align-items:center;gap:6px;margin-bottom:6px}
 .bot-pick select{background:var(--panel-2);color:inherit;border:1px solid var(--line,#333);border-radius:8px;padding:3px 6px}
 .delegated{margin:4px 0 2px 2px}
+
+/* bot chat: avatar beside assistant messages, distinct user rows, honest thinking state */
+.bot-panel{margin:0 0 18px;border:1px solid var(--hair-2);border-radius:var(--radius-card);background:var(--panel);padding:12px 14px}
+.bot-head{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.bot-head .n{font-weight:600}
+.bot-chat{height:min(68vh,640px)}
+.msg-row{display:flex;gap:10px;align-items:flex-start;margin:4px 0}
+.user-row{justify-content:flex-end}
+.assistant-row{justify-content:flex-start}
+.msg-av{margin-top:6px}
+.msg-col{min-width:0;max-width:calc(100% - 52px)}
+.msg-name{margin:6px 2px 0}
+.thinking{display:flex;gap:8px;align-items:center;margin:8px 0 8px 52px}
+.dots{display:inline-block;width:26px;height:8px;background:radial-gradient(circle,var(--accent,#F36B21) 3px,transparent 3.5px) 0 0/9px 8px repeat-x;animation:roycePulse 1s infinite steps(3)}
+@keyframes roycePulse{0%{background-position:0 0}100%{background-position:26px 0}}
+.step-line{margin:6px 0 0 52px}
+.step-line.s-failed{color:#f87171}
+.approval-box{display:block}
+.approval-row{justify-content:space-between;margin-top:6px}
+.playbook{margin-top:10px}
+.playbook summary{cursor:pointer;color:var(--accent,#F36B21);font-size:13px}
+.playbook-text{white-space:pre-wrap;word-wrap:break-word;max-height:280px;overflow:auto;background:var(--panel-2);padding:10px;border-radius:var(--radius-ctl);font-family:inherit;font-size:12.5px;margin:8px 0 0}
+.work-panel{border-color:var(--accent,#F36B21)}
+@media (max-width:480px){
+  .bot-chat{height:min(72vh,560px)}
+  .msg-col{max-width:calc(100% - 52px)}
+  .thinking,.step-line{margin-left:0}
+  .bot-panel{padding:10px}
+}

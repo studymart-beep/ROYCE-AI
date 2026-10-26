@@ -12,6 +12,8 @@
     provider: null,
     sideQuery: "",
     selectedBot: null,
+    botScope: null,
+    workConvId: null,
   };
 
   // ---------- DOM helpers (textContent only) ----------
@@ -134,7 +136,7 @@
         item.type = "button";
         item.appendChild(el("span", "t", b.name));
         item.appendChild(el("span", "s", b.template === "coordinator" ? "coordinates all bots" : (b.template ? "template: " + b.template : "custom")));
-        item.addEventListener("click", () => { state.selectedBot = b.id; renderBots(); });
+        item.addEventListener("click", () => { selectBot(b.id); });
         list.appendChild(item);
       });
     }).catch((e) => { list.textContent = "couldn't load bots: " + e.message; });
@@ -195,6 +197,8 @@
       const [bots, tpl] = await Promise.all([api("GET", "/bots"), api("GET", "/bots/templates")]);
       if (!bots.bots.length) list.appendChild(empty("no bots yet. make one below."));
       bots.bots.forEach((b) => list.appendChild(botCard(b)));
+      const sel = bots.bots.find((b) => b.id === state.selectedBot);
+      if (sel) body.insertBefore(botChatPanel(sel), makeWrap.previousSibling);
       renderMakeBot(makeWrap, tpl.templates || []);
     } catch (e) {
       list.appendChild(notice("couldn't load bots: " + e.message));
@@ -215,7 +219,12 @@
     txt.appendChild(el("div", "d", b.template === "coordinator" ? "coordinates all bots" : (b.template ? "pins the " + b.template + " playbook" : "custom persona")));
     row.appendChild(txt);
     card.appendChild(row);
-    if (b.template === "coordinator") { return card; }
+    const open = btn(b.template === "coordinator" ? "Open work workspace" : "Open chat", "small", () => selectBot(b.id), (b.template === "coordinator" ? "open work workspace " : "open chat with ") + b.name);
+    card.appendChild(el("div", "row", "")).appendChild(open);
+    if (b.template === "coordinator") {
+      card.appendChild(playbookDisclosure(b));
+      return card;
+    }
     const del = btn("Delete", "danger small", async () => {
       if (!window.confirm("Delete bot " + b.name + "?")) return;
       try { await api("DELETE", "/bots/" + encodeURIComponent(b.id)); toast("bot deleted"); renderBots(); sideBots(); }
@@ -223,6 +232,28 @@
     }, "delete bot " + b.name);
     card.appendChild(el("div", "row", "")).appendChild(del);
     return card;
+  }
+  function playbookDisclosure(b) {
+    const wrap = el("details", "playbook");
+    const sum = el("summary", "", "playbook");
+    wrap.appendChild(sum);
+    const body = el("div", "playbook-body muted small", "loading playbook...");
+    wrap.appendChild(body);
+    let loaded = false;
+    wrap.addEventListener("toggle", async () => {
+      if (!wrap.open || loaded) return;
+      loaded = true;
+      try {
+        const p = await api("GET", "/bots/" + encodeURIComponent(b.id) + "/persona");
+        clear(body);
+        body.appendChild(el("pre", "playbook-text", p.persona || "no playbook pinned for this bot."));
+      } catch (e) {
+        clear(body);
+        body.appendChild(el("div", "small", "couldn't load the playbook: " + e.message));
+        loaded = false;
+      }
+    });
+    return wrap;
   }
   function renderMakeBot(wrap, templates) {
     clear(wrap);
@@ -322,7 +353,10 @@
     if (!list) return;
     try {
       const q = state.sideQuery.trim();
-      state.convs = await api("GET", "/conversations" + (q ? "?q=" + encodeURIComponent(q) : ""));
+      const qs = [];
+      if (q) qs.push("q=" + encodeURIComponent(q));
+      if (state.botScope) qs.push("bot_id=" + encodeURIComponent(state.botScope));
+      state.convs = await api("GET", "/conversations" + (qs.length ? "?" + qs.join("&") : ""));
     } catch (e) {
       clear(list).appendChild(notice("couldn't load chats: " + e.message));
       return;
@@ -390,8 +424,8 @@
         const dl = delegationLine(m.meta.delegations);
         if (dl) scroll.appendChild(dl);
       }
-      const b = el("div", "bubble " + role, m.content || m.text || "");
-      scroll.appendChild(b);
+      if (role === "user") scroll.appendChild(userBubble(m.content || m.text || ""));
+      else scroll.appendChild(assistantBubble(m.content || m.text || "", m.meta && m.meta.bot_name ? { name: m.meta.bot_name } : null));
     });
     scroll.scrollTop = scroll.scrollHeight;
   }
@@ -459,6 +493,179 @@
     wrap.appendChild(sel);
     return wrap;
   }
+  function thinkingRow(label) {
+    const row = el("div", "thinking");
+    row.setAttribute("role", "status");
+    row.appendChild(el("span", "dots", ""));
+    row.appendChild(el("span", "small muted", label));
+    return row;
+  }
+  function avatarNode() {
+    const av = el("span", "bot-av msg-av");
+    const img = document.createElement("img");
+    img.src = "/static/mascot.png";
+    img.alt = "";
+    av.appendChild(img);
+    return av;
+  }
+  function assistantBubble(text, bot) {
+    const row = el("div", "msg-row assistant-row");
+    row.appendChild(avatarNode());
+    const col = el("div", "msg-col");
+    if (bot && bot.name) col.appendChild(el("div", "msg-name muted small", bot.name));
+    col.appendChild(el("div", "bubble assistant", text));
+    row.appendChild(col);
+    return row;
+  }
+  function userBubble(text) {
+    const row = el("div", "msg-row user-row");
+    row.appendChild(el("div", "bubble user", text));
+    return row;
+  }
+  function selectBot(id) {
+    state.selectedBot = id;
+    state.botScope = id;
+    state.convId = null;
+    go("bots");
+  }
+  function botChatPanel(bot) {
+    const isWork = bot.template === "coordinator";
+    const wrap = el("section", isWork ? "bot-panel work-panel" : "bot-panel");
+    const head = el("header", "bot-head");
+    head.appendChild(avatarNode());
+    const t = el("div");
+    t.appendChild(el("div", "n", isWork ? bot.name + " \u2014 work workspace" : bot.name));
+    t.appendChild(el("div", "d muted small", isWork ? "complex work: delegates to your bots and waits for your approval" : (bot.template ? "pins the " + bot.template + " playbook" : "custom persona")));
+    head.appendChild(t);
+    wrap.appendChild(head);
+    mountChat(wrap, { botId: bot.id, botName: bot.name, work: isWork });
+    return wrap;
+  }
+  // One chat surface for a bot (normal) or the Chief work workspace. Each bot keeps its own conversation.
+  function mountChat(host, cfg) {
+    const scroll = el("div", "chat-scroll");
+    scroll.setAttribute("aria-live", "polite");
+    const errSlot = el("div");
+    const compose = el("form", "composer");
+    compose.autocomplete = "off";
+    const ta = el("textarea");
+    ta.placeholder = cfg.work ? "Give " + cfg.botName + " a complex task. Enter sends, Shift+Enter for a new line." : "Message " + cfg.botName + ". Enter sends, Shift+Enter for a new line.";
+    ta.setAttribute("aria-label", "Message " + cfg.botName);
+    ta.rows = 2;
+    compose.appendChild(ta);
+    const ctools = el("div", "composer-tools");
+    const approvalChipEl = el("span", "chip off", "no approvals waiting");
+    ctools.appendChild(approvalChipEl);
+    const send = btn("Send", "primary", null, "send message");
+    send.type = "submit";
+    ctools.appendChild(send);
+    compose.appendChild(ctools);
+    ta.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); compose.requestSubmit(); }
+    });
+    const wrap = el("div", "chat bot-chat");
+    wrap.appendChild(scroll);
+    wrap.appendChild(errSlot);
+    wrap.appendChild(compose);
+    host.appendChild(wrap);
+    const key = cfg.work ? "__work" : cfg.botId;
+    // approvals strip: pending count from the real approvals endpoint
+    approvalChipEl.id = "approvalChip";
+    state.convByBot = state.convByBot || {};
+    let convId = state.convByBot[key] || null;
+    const persist = (id) => { state.convByBot[key] = id; };
+    async function load() {
+      if (!convId) { scroll.appendChild(empty("no messages yet. say hi to " + cfg.botName + ".")); return; }
+      try {
+        const c = await api("GET", "/conversations/" + encodeURIComponent(convId));
+        clear(scroll);
+        renderHistory(scroll, c.messages || []);
+      } catch (e) { scroll.appendChild(notice("couldn't open that chat: " + e.message)); }
+    }
+    async function run(text) {
+      clear(errSlot);
+      scroll.appendChild(userBubble(text));
+      ta.value = "";
+      send.disabled = true;
+      const thinking = thinkingRow(cfg.work ? "working on it..." : "thinking...");
+      scroll.appendChild(thinking);
+      scroll.scrollTop = scroll.scrollHeight;
+      try {
+        const res = await api("POST", "/chat", { message: text, conversation_id: convId, bot_id: cfg.botId });
+        thinking.remove();
+        convId = res.conversation_id; persist(convId);
+        if (cfg.work) renderWorkResult(scroll, res);
+        else scroll.appendChild(assistantBubble(res.reply || "", res.bot));
+        scroll.scrollTop = scroll.scrollHeight;
+        loadConvs(); refreshApprovals();
+      } catch (e) {
+        thinking.remove();
+        scroll.appendChild(el("div", "bubble error", "The reply didn't go through: " + e.message));
+        const bar = el("div", "err-box");
+        bar.appendChild(el("span", "", "Nothing was stored, so retrying is safe."));
+        bar.appendChild(btn("Retry", "", () => { bar.remove(); run(text); }, "retry message"));
+        errSlot.appendChild(bar);
+      } finally {
+        send.disabled = false;
+      }
+    }
+    compose.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const text = ta.value.trim();
+      if (text) run(text);
+    });
+    load();
+  }
+  function renderHistory(scroll, msgs) {
+    if (!msgs.length) { scroll.appendChild(empty("no messages yet.")); return; }
+    msgs.forEach((m) => {
+      if (m.role === "user") scroll.appendChild(userBubble(m.text || m.content || ""));
+      else scroll.appendChild(assistantBubble(m.text || m.content || "", m.meta && m.meta.bot_name ? { name: m.meta.bot_name } : null));
+    });
+  }
+  // Renders delegation metadata the normal bot chat never shows: one line per step, step N of M, status.
+  function renderWorkResult(scroll, res) {
+    const ds = res.delegations || [];
+    const total = ds.length;
+    ds.forEach((d, i) => {
+      const label = "step " + (i + 1) + " of " + total + ": delegated to " + d.bot_name + " \u2014 " + stepStatus(d.status);
+      scroll.appendChild(el("div", "delegated muted small step-line s-" + d.status, label));
+    });
+    scroll.appendChild(assistantBubble(res.reply || "", res.bot));
+    if (res.status === "awaiting_approval") {
+      const bar = el("div", "err-box approval-box");
+      bar.appendChild(el("span", "", "This step needs your approval before it runs."));
+      scroll.appendChild(bar);
+      loadApprovalsInto(bar);
+    } else if (res.status === "partial") {
+      scroll.appendChild(el("div", "small muted", "finished with some steps not completed."));
+    } else if (res.status === "completed") {
+      scroll.appendChild(el("div", "small muted", "done."));
+    }
+  }
+  function stepStatus(s) {
+    return ({ completed: "done", failed: "failed", awaiting_approval: "waiting for approval", skipped_hop_limit: "skipped (step limit)" })[s] || String(s || "pending");
+  }
+  async function loadApprovalsInto(bar) {
+    try {
+      const items = await api("GET", "/approvals");
+      const pending = items.filter((a) => a.status === "pending");
+      if (!pending.length) { bar.appendChild(el("span", "small muted", "nothing waiting for approval right now.")); return; }
+      pending.forEach((a) => {
+        const row = el("div", "row approval-row");
+        row.appendChild(el("span", "small", a.summary || a.action_class || "approval"));
+        row.appendChild(btn("Approve", "primary small", async () => {
+          try { await api("POST", "/approvals/" + encodeURIComponent(a.id) + "/approve"); toast("approved"); row.remove(); }
+          catch (e) { toast(e.message, true); }
+        }, "approve " + (a.id || "")));
+        row.appendChild(btn("Reject", "danger small", async () => {
+          try { await api("POST", "/approvals/" + encodeURIComponent(a.id) + "/reject"); toast("rejected"); row.remove(); }
+          catch (e) { toast(e.message, true); }
+        }, "reject " + (a.id || "")));
+        bar.appendChild(row);
+      });
+    } catch (e) { bar.appendChild(el("span", "small", "couldn't load approvals: " + e.message)); }
+  }
   function delegationLine(delegations) {
     const names = (delegations || []).filter((d) => d.status === "completed").map((d) => d.bot_name);
     if (!names.length) return null;
@@ -472,15 +679,21 @@
     ta.value = "";
     send.disabled = true;
     try {
+      const thinking = thinkingRow(state.selectedBot ? "thinking..." : "thinking...");
+      scroll.appendChild(thinking);
+      scroll.scrollTop = scroll.scrollHeight;
       const res = await api("POST", "/chat", { message: text, conversation_id: state.convId, bot_id: state.selectedBot || null });
+      thinking.remove();
       state.convId = res.conversation_id;
       const dl = delegationLine(res.delegations);
       if (dl) scroll.appendChild(dl);
-      scroll.appendChild(el("div", "bubble assistant", res.reply || ""));
+      scroll.appendChild(assistantBubble(res.reply || "", res.bot));
       scroll.scrollTop = scroll.scrollHeight;
       loadConvs();
       loadProviderStatus();
     } catch (e) {
+      const t = scroll.querySelector(".thinking");
+      if (t) t.remove();
       scroll.appendChild(el("div", "bubble error", "The reply didn't go through: " + e.message));
       errSlot.appendChild(retryBar(text));
     } finally {
@@ -555,7 +768,7 @@
     }
   }
   async function refreshApprovals() {
-    const chip = $("approvalChip");
+    const chip = $("approvalChip") || document.querySelector(".composer .chip");
     if (!chip) return;
     try {
       const items = await api("GET", "/approvals");
