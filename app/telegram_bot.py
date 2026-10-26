@@ -5,6 +5,7 @@ from . import db, collectors, workstore, tasks
 from . import leadbrain
 from . import skills
 from .style import VOICE_RULES, sanitize
+from . import tgstore, tgwelcomes, tgmod
 from .agent import budget, memory, approvals, permissions, jobs, audit
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
