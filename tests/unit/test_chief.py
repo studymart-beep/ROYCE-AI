@@ -295,3 +295,54 @@ def test_audit_rows_record_ids_not_content(client, monkeypatch):
     assert delegated and delegated[0]["target"] == f"{chief_bot['id']}->{d['id']}"
     raw = open(audit.PATH, encoding="utf-8").read()
     assert secret not in raw and "ZZZ-9999" not in raw
+
+
+def test_work_chat_returns_delegation_metadata_per_step(client, monkeypatch):
+    """The chief work chat gets real delegation metadata: which bot ran, and the status of each step."""
+    from app import llm
+    from app.agent import router
+    direct, brand = _specialists()
+    chief_bot = bots.ensure_coordinator()
+    route = json.dumps({"steps": [
+        {"bot": direct["id"], "instruction": "3 hooks", "needs_approval": False},
+        {"bot": brand["id"], "instruction": "check tone", "needs_approval": False},
+    ]})
+    fake = FakeLLM(route, answers=("hook one", "tone ok"))
+    monkeypatch.setattr(llm, "_post_chat", lambda pid, msgs, temp, timeout: fake(msgs, temperature=temp))
+    monkeypatch.setattr(router, "is_configured", lambda pid: True, raising=False)
+    r = client.post("/api/ws/chat", json={"message": "hooks then tone", "bot_id": chief_bot["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["bot"]["id"] == chief_bot["id"]
+    names = [d["bot_name"] for d in body["delegations"]]
+    assert names == ["Ad hooks", "Brand voice"]
+    assert all(d["status"] == "completed" for d in body["delegations"])
+    # the stored work-chat message keeps the same metadata so a reload can re-render it
+    conv = conversations.get(body["conversation_id"])
+    assert conv["bot_id"] == chief_bot["id"]
+    assert conv["messages"][-1]["meta"]["delegations"][0]["bot_name"] == "Ad hooks"
+
+
+def test_work_chat_approval_roundtrip_through_endpoint(client, monkeypatch):
+    """A step that needs approval shows as awaiting_approval, and approving through the endpoint runs it."""
+    from app import llm
+    from app.agent import approvals, router
+    direct, _ = _specialists()
+    chief_bot = bots.ensure_coordinator()
+    route = json.dumps({"steps": [{"bot": direct["id"], "instruction": "send it", "needs_approval": True}]})
+    fake = FakeLLM(route, answers=("done",))
+    monkeypatch.setattr(llm, "_post_chat", lambda pid, msgs, temp, timeout: fake(msgs, temperature=temp))
+    monkeypatch.setattr(router, "is_configured", lambda pid: True, raising=False)
+    body = client.post("/api/ws/chat", json={"message": "send hooks", "bot_id": chief_bot["id"]}).json()
+    assert body["status"] == "awaiting_approval"
+    assert body["delegations"][0]["status"] == "awaiting_approval"
+    # approvals endpoint lists pending items for the work chat to render
+    pending = client.get("/api/ws/approvals").json()
+    assert isinstance(pending, list)
+    # approve through the endpoint with a queued record bound to this chat
+    rec = approvals.queue("chat-x", "send_message", {"to": "x"}, summary="send hooks")
+    rid = rec["id"]
+    assert any(a["id"] == rid and a["status"] == approvals.PENDING for a in client.get("/api/ws/approvals").json())
+    r = client.post(f"/api/ws/approvals/{rid}/reject")
+    assert r.status_code == 200, r.text
+    assert not any(a["id"] == rid for a in client.get("/api/ws/approvals").json() if a["status"] == approvals.PENDING)
