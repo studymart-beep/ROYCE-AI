@@ -143,7 +143,7 @@
   }
   function sideSessions() {
     const head = sideHead("Sessions");
-    const newBtn = btn("New chat", "primary", newChat, "start a new chat");
+    const newBtn = btn("＋ New chat", "primary side-new", newChat, "start a new chat");
     newBtn.style.margin = "0 12px 10px";
     const search = sideSearchBox("Search chats", (q) => { state.sideQuery = q; loadConvs(); }, state.sideQuery);
     const list = el("div", "side-list");
@@ -185,14 +185,17 @@
   // ---------- Bots ----------
   async function renderBots() {
     const body = clear($("pageBody"));
-    body.appendChild(el("h2", "h2", "Bots"));
-    body.appendChild(el("p", "muted small", "A bot is a named persona that pins one marketing playbook into the chat."));
+    const hero = el("div", "hero");
+    hero.style.paddingTop = "10px";
+    hero.appendChild(el("p", "page-kicker", "Royce AI \u00b7 Make a bot"));
+    hero.appendChild(el("h2", "", "Make a bot"));
+    hero.appendChild(el("p", "", "Name it, pick a face, pick a playbook. Every bot pins one marketing playbook into the chat."));
+    body.appendChild(hero);
+    const makeWrap = el("div");
+    body.appendChild(makeWrap);
     const list = el("div", "grid");
     body.appendChild(el("div", "sec", "Your bots"));
     body.appendChild(list);
-    const makeWrap = el("div");
-    body.appendChild(el("div", "sec", "Make a bot"));
-    body.appendChild(makeWrap);
     try {
       const [bots, tpl] = await Promise.all([api("GET", "/bots"), api("GET", "/bots/templates")]);
       if (!bots.bots.length) list.appendChild(empty("no bots yet. make one below."));
@@ -205,7 +208,7 @@
     }
   }
   function botCard(b) {
-    const card = el("div", "card");
+    const card = el("div", "card hoverable");
     const row = el("div", "bot-card");
     const av = el("span", "bot-av");
     const img = document.createElement("img");
@@ -257,76 +260,100 @@
   }
   function renderMakeBot(wrap, templates) {
     clear(wrap);
-    const card = el("div", "card");
-    const form = el("form");
-    form.autocomplete = "off";
-    const nameLabel = el("label", "small muted", "Bot name");
-    nameLabel.htmlFor = "botName";
-    const name = el("input", "input wide");
-    name.id = "botName";
-    name.maxLength = 60;
-    name.placeholder = "e.g. Lagos ad writer";
-    name.setAttribute("aria-label", "Bot name");
-    form.appendChild(nameLabel);
-    form.appendChild(name);
-    form.appendChild(el("div", "sec", "Avatar"));
-    const avs = el("div", "bot-avatars");
-    const avatarOpts = [
-      { key: "mascot", src: "/static/mascot.png", label: "Royce mascot" },
-    ];
-    avatarOpts.forEach((o, i) => {
+    const hero = el("div", "hero");
+    hero.style.paddingTop = "6px";
+    const faces = ["/static/mascot.png"];
+    const faceRow = el("div", "bot-avatars");
+    faceRow.style.justifyContent = "center";
+    faceRow.style.marginBottom = "14px";
+    faces.forEach((src, i) => {
       const b = el("button", "av");
       b.type = "button";
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", i === 0 ? "true" : "false");
-      b.setAttribute("aria-label", o.label);
-      b.dataset.value = o.key;
+      b.setAttribute("aria-label", "Royce mascot");
+      b.style.width = "76px"; b.style.height = "76px"; b.style.borderRadius = "50%";
+      b.style.borderColor = "var(--accent)";
       const img = document.createElement("img");
-      img.src = o.src;
-      img.alt = "";
+      img.src = src; img.alt = "";
+      img.style.borderRadius = "50%";
       b.appendChild(img);
-      avs.appendChild(b);
+      faceRow.appendChild(b);
     });
-    form.appendChild(avs);
-    form.appendChild(el("div", "sec", "Template"));
+    hero.appendChild(faceRow);
+    const form = el("form");
+    form.autocomplete = "off";
+    form.style.maxWidth = "560px"; form.style.margin = "0 auto"; form.style.width = "100%";
+    const pill = el("div", "name-pill");
+    const name = el("input", "");
+    name.id = "botName";
+    name.maxLength = 60;
+    name.placeholder = "Name your bot";
+    name.setAttribute("aria-label", "Bot name");
+    const goBtn = el("button", "send-fab", "\u2191");
+    goBtn.type = "submit";
+    goBtn.setAttribute("aria-label", "create bot");
+    pill.appendChild(name);
+    pill.appendChild(goBtn);
+    form.appendChild(pill);
+    const status = el("div", "small muted", "");
+    status.style.textAlign = "center"; status.style.marginTop = "8px";
+    status.setAttribute("aria-live", "polite");
+    form.appendChild(status);
+    hero.appendChild(form);
+    wrap.appendChild(hero);
+    // templates
+    const secT = el("div", "sec", "Templates");
+    wrap.appendChild(secT);
     const tabs = el("div", "tabs");
     tabs.setAttribute("role", "tablist");
-    const cards = el("div", "grid");
     let picked = templates[0] ? templates[0].key : null;
+    let filter = "Featured";
+    const tabNames = ["Featured"];
+    templates.slice(0, 4).forEach((t) => tabNames.push(t.label || t.key));
+    if (templates.length > 4) tabNames.push("More");
+    const cards = el("div", "template-grid");
+    function visibleTemplates() {
+      if (filter === "Featured" || filter === "More") return templates;
+      return templates.filter((t) => (t.label || t.key) === filter);
+    }
     function paintCards() {
       clear(cards);
-      templates.forEach((t) => {
-        const c = el("div", "card");
-        c.appendChild(el("div", "card-title", t.label || t.key));
-        c.appendChild(el("div", "small muted", t.description || ""));
-        const sel = btn(picked === t.key ? "Selected" : "Use template", picked === t.key ? "primary" : "", () => { picked = t.key; paintCards(); }, "use template " + (t.label || t.key));
-        c.appendChild(el("div", "row", "")).appendChild(sel);
+      const vis = visibleTemplates();
+      if (!vis.length) { cards.appendChild(empty("no templates in this group yet.")); return; }
+      vis.forEach((t) => {
+        const c = el("div", "template-card");
+        const isSel = picked === t.key;
+        if (isSel) { c.style.borderColor = "var(--accent-line)"; }
+        c.appendChild(el("div", "t-ico", "\u2726"));
+        c.appendChild(el("h3", "", t.label || t.key));
+        c.appendChild(el("p", "", t.description || ""));
+        const sel = btn(isSel ? "Selected" : "Use template", isSel ? "primary small" : "small", () => { picked = t.key; paintCards(); }, "use template " + (t.label || t.key));
+        const row = el("div", "row", ""); row.appendChild(sel);
+        c.appendChild(row);
         cards.appendChild(c);
       });
     }
-    const cats = ["all"];
-    const tabBtns = cats.map((c) => {
-      const t = el("button", "tab", c === "all" ? "All" : c);
+    tabNames.forEach((tn) => {
+      const t = el("button", "tab", tn);
       t.type = "button";
       t.setAttribute("role", "tab");
-      t.setAttribute("aria-selected", "true");
-      return t;
+      t.setAttribute("aria-selected", tn === filter ? "true" : "false");
+      t.addEventListener("click", () => {
+        filter = tn;
+        tabs.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", x.textContent === tn ? "true" : "false"));
+        paintCards();
+      });
+      tabs.appendChild(t);
     });
-    tabBtns.forEach((t) => tabs.appendChild(t));
-    form.appendChild(tabs);
-    form.appendChild(cards);
+    wrap.appendChild(tabs);
+    wrap.appendChild(cards);
     paintCards();
-    const make = btn("Create bot", "primary", null, "create bot");
-    make.type = "submit";
-    const status = el("div", "small muted", "");
-    status.setAttribute("aria-live", "polite");
-    form.appendChild(el("div", "row", "")).appendChild(make);
-    form.appendChild(status);
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const n = name.value.trim();
       if (!n) { toast("give the bot a name", true); name.focus(); return; }
-      make.disabled = true;
+      goBtn.disabled = true;
       try {
         const bot = await api("POST", "/bots", { name: n, template: picked });
         toast("bot created: " + bot.name);
@@ -335,10 +362,8 @@
         sideBots();
       } catch (e) {
         status.textContent = e.message;
-      } finally { make.disabled = false; }
+      } finally { goBtn.disabled = false; }
     });
-    card.appendChild(form);
-    wrap.appendChild(card);
   }
 
   function fmtDate(v) {
@@ -415,7 +440,7 @@
     if (!scroll) return;
     clear(scroll);
     if (!msgs.length) {
-      scroll.appendChild(empty("start a chat. ask for an ad script, a caption, or a campaign report."));
+      scroll.appendChild(empty("Start a session \u2014 ask for an ad script, a caption, or a campaign report. Your bots pin the playbook; Royce runs it."));
       return;
     }
     msgs.forEach((m) => {
@@ -433,7 +458,7 @@
     const box = el("form", "composer");
     box.autocomplete = "off";
     const ta = el("textarea");
-    ta.placeholder = "Message Royce AI. Enter sends, Shift+Enter for a new line.";
+    ta.placeholder = "Reply, or steer the run\u2026  (Enter sends, Shift+Enter for a new line)";
     ta.setAttribute("aria-label", "Message");
     ta.rows = 2;
     box.appendChild(ta);
@@ -442,16 +467,23 @@
     const approval = el("span", "chip off", "no approvals waiting");
     approval.id = "approvalChip";
     left.appendChild(approval);
-    const attach = el("span", "small muted", "attachments: not available in the web chat yet");
+    const attach = el("span", "small muted", "plain-text chat \u00b7 attachments live in the workspace folder");
     left.appendChild(attach);
     tools.appendChild(left);
     const right = el("div", "row");
-    const sel = el("select", "select");
+    const pill = el("span", "model-pill", "Model\u00a0");
+    const sel = document.createElement("select");
     sel.id = "providerSel";
+    sel.className = "select";
+    sel.style.border = "0";
+    sel.style.background = "transparent";
+    sel.style.padding = "0";
     sel.setAttribute("aria-label", "Model provider");
-    right.appendChild(sel);
-    const send = btn("Send", "primary", null, "send message");
+    pill.appendChild(sel);
+    right.appendChild(pill);
+    const send = el("button", "send-fab", "\u2191");
     send.type = "submit";
+    send.setAttribute("aria-label", "send message");
     right.appendChild(send);
     tools.appendChild(right);
     box.appendChild(tools);
@@ -549,15 +581,16 @@
     const compose = el("form", "composer");
     compose.autocomplete = "off";
     const ta = el("textarea");
-    ta.placeholder = cfg.work ? "Give " + cfg.botName + " a complex task. Enter sends, Shift+Enter for a new line." : "Message " + cfg.botName + ". Enter sends, Shift+Enter for a new line.";
+    ta.placeholder = cfg.work ? "Give " + cfg.botName + " a complex task\u2026  (Enter sends, Shift+Enter for a new line)" : "Message " + cfg.botName + "\u2026  (Enter sends, Shift+Enter for a new line)";
     ta.setAttribute("aria-label", "Message " + cfg.botName);
     ta.rows = 2;
     compose.appendChild(ta);
     const ctools = el("div", "composer-tools");
     const approvalChipEl = el("span", "chip off", "no approvals waiting");
     ctools.appendChild(approvalChipEl);
-    const send = btn("Send", "primary", null, "send message");
+    const send = el("button", "send-fab", "\u2191");
     send.type = "submit";
+    send.setAttribute("aria-label", "send message");
     ctools.appendChild(send);
     compose.appendChild(ctools);
     ta.addEventListener("keydown", (ev) => {
@@ -761,6 +794,11 @@
       }
       const usage = await api("GET", "/usage");
       $("usageLine").textContent = usage.remaining_this_hour + " requests left this hour";
+      const fill = $("usageBarFill");
+      if (fill && usage.used_this_hour != null && usage.remaining_this_hour != null) {
+        const total = usage.used_this_hour + usage.remaining_this_hour;
+        fill.style.width = total ? Math.max(4, Math.round((usage.remaining_this_hour / total) * 100)) + "%" : "60%";
+      }
       refreshApprovals();
     } catch (e) {
       $("statusPill").textContent = "status unavailable";
@@ -781,7 +819,38 @@
   // ---------- Routines ----------
   async function renderRoutines() {
     const body = clear($("pageBody"));
-    body.appendChild(el("h2", "h2", "Routines"));
+    const hero = el("div", "hero");
+    const orbs = el("div", "hero-orbs");
+    ["\u25d7", "\u2726", "\u25a4"].forEach((g, i) => orbs.appendChild(el("span", "orb " + ["p", "g", "b"][i], g)));
+    hero.appendChild(orbs);
+    hero.appendChild(el("h2", "", "Put your bots on a schedule"));
+    hero.appendChild(el("p", "", "A routine runs a prompt on its own: every morning, every few hours, or when a webhook calls it. System jobs run on this server; reminders you add below are stored here."));
+    hero.appendChild(btn("New reminder", "primary", () => { const f = $("routineForm"); if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); const n = $("routineName"); if (n) n.focus(); } }, "add a new reminder"));
+    body.appendChild(hero);
+    body.appendChild(el("div", "sec", "Or start from one of these"));
+    const presets = [
+      ["Morning brief", "What today needs: the calendar, the mail worth a reply, and anything addressed to you.", "Every morning"],
+      ["Inbox triage", "Sort new mail into reply, read, and noise, and draft the replies.", "Every hour"],
+      ["Ad performance check", "Pull spend and results since yesterday; flag exactly what changed.", "Every morning"],
+      ["Content calendar", "Draft next week's posts from the pinned playbook.", "Weekly"],
+      ["Lead follow-up", "List open leads and draft the next nudge for each.", "Every morning"],
+      ["Week in review", "What shipped this week, grouped by theme.", "Weekly"],
+    ];
+    const tgrid = el("div", "template-grid");
+    presets.forEach(([t, d, s]) => {
+      const tc = el("div", "template-card");
+      tc.appendChild(el("div", "t-ico", "\u2726"));
+      tc.appendChild(el("h3", "", t));
+      tc.appendChild(el("p", "", d));
+      tc.appendChild(el("div", "row", "")).appendChild(btn("Use", "small", () => {
+        const f = $("routineForm"); const n = $("routineName"); const sc = $("routineWhen");
+        if (n) n.value = t; if (sc) sc.value = s;
+        if (f) f.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (n) n.focus();
+      }, "use preset " + t));
+      tgrid.appendChild(tc);
+    });
+    body.appendChild(tgrid);
     body.appendChild(el("p", "muted small", "System jobs run on this server. Reminders you add here are stored but do not run automatically yet."));
     const sysWrap = el("div");
     const userWrap = el("div");
@@ -791,12 +860,15 @@
     body.appendChild(notice("runs_automatically: false. Reminders are saved only. They do not fire on their own yet."));
     body.appendChild(userWrap);
     const form = el("form", "card");
+    form.id = "routineForm";
     form.style.margin = "12px 0";
     const name = el("input", "input wide");
+    name.id = "routineName";
     name.placeholder = "Reminder title";
     name.maxLength = 80;
     name.setAttribute("aria-label", "Reminder title");
     const sched = el("input", "input");
+    sched.id = "routineWhen";
     sched.placeholder = "When (free text)";
     sched.maxLength = 120;
     sched.setAttribute("aria-label", "When");
@@ -893,11 +965,26 @@
     pane.appendChild(grid);
     try {
       const d = await api("GET", "/connectors");
+      const iconFor = (c) => {
+        const n = String(c.label || c.name || "?");
+        if (/gmail|mail/i.test(n)) return ["G", "gmail"];
+        if (/github/i.test(n)) return ["\u2325", "github"];
+        if (/telegram/i.test(n)) return ["\u2708", "telegram"];
+        if (/whatsapp/i.test(n)) return ["\u2706", "whatsapp"];
+        if (/discord/i.test(n)) return ["\u25c8", "discord"];
+        return [n.slice(0, 1).toUpperCase(), ""];
+      };
       d.connectors.forEach((c) => {
-        const card = el("div", "card");
-        card.appendChild(el("div", "card-title", c.label || c.name));
-        card.appendChild(el("div", "small muted", c.is_ads ? "ads platform" : "inbox / other"));
-        card.appendChild(chip(c.configured ? "Connected" : "Available", c.configured ? "on" : "off"));
+        const card = el("div", "conn-card");
+        const [g, cls] = iconFor(c);
+        card.appendChild(el("div", "conn-ico " + cls, g));
+        const main = el("div", "conn-main");
+        main.appendChild(el("div", "conn-name", c.label || c.name));
+        main.appendChild(el("div", "conn-sub", (c.is_ads ? "ads platform" : "inbox / other") + (c.configured ? " \u00b7 connected" : " \u00b7 available")));
+        card.appendChild(main);
+        const acts = el("div", "conn-actions");
+        acts.appendChild(chip(c.configured ? "Connected" : "Available", c.configured ? "on" : "off"));
+        card.appendChild(acts);
         grid.appendChild(card);
       });
       if (!d.connectors.length) grid.appendChild(empty("no connectors registered"));

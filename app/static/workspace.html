@@ -3,33 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Royce AI</title>
-<meta name="theme-color" content="#0d0d0f">
+<title>Royce AI — Bots, Sessions, Routines</title>
+<meta name="description" content="Royce AI workspace: chat with your bots, run routines, review artifacts and connect tools.">
+<meta name="theme-color" content="#08080a">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/mascot.png">
 <link rel="icon" href="/static/mascot.png" type="image/png">
 <link rel="stylesheet" href="/static/workspace.css">
 </head>
 <body>
+<div class="bg-glow" aria-hidden="true"></div>
 <div class="app" id="app">
   <nav class="rail" aria-label="Main">
+    <div class="rail-brand">
+      <img src="/static/mascot.png" alt="Royce AI" width="32" height="32">
+      <span class="rail-brand-name">Royce AI</span>
+    </div>
     <div class="rail-top">
-      <button class="rail-item" data-page="bots" aria-label="Bots"><span class="rail-ico" aria-hidden="true">&#9673;</span><span class="rail-label">Bots</span></button>
-      <button class="rail-item" data-page="sessions" aria-label="Sessions"><span class="rail-ico" aria-hidden="true">&#9776;</span><span class="rail-label">Sessions</span></button>
-      <button class="rail-item" data-page="routines" aria-label="Routines"><span class="rail-ico" aria-hidden="true">&#8635;</span><span class="rail-label">Routines</span></button>
-      <button class="rail-item" data-page="artifacts" aria-label="Artifacts"><span class="rail-ico" aria-hidden="true">&#10070;</span><span class="rail-label">Artifacts</span></button>
-      <button class="rail-item" data-page="library" aria-label="Library"><span class="rail-ico" aria-hidden="true">&#9638;</span><span class="rail-label">Library</span></button>
+      <button class="rail-item" data-page="bots" aria-label="Bots">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.4" fill="currentColor" stroke="none"/><path d="M8.5 15c1.8 1.2 5.2 1.2 7 0" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></span>
+        <span class="rail-label">Bots</span>
+      </button>
+      <button class="rail-item" data-page="sessions" aria-label="Sessions">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16v9H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <span class="rail-label">Sessions</span>
+      </button>
+      <button class="rail-item" data-page="routines" aria-label="Routines">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8v4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <span class="rail-label">Routines</span>
+      </button>
+      <button class="rail-item" data-page="artifacts" aria-label="Artifacts">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12h6M9 15.5h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+        <span class="rail-label">Artifacts</span>
+      </button>
+      <button class="rail-item" data-page="library" aria-label="Library">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <span class="rail-label">Library</span>
+      </button>
     </div>
     <div class="rail-bottom">
-      <button class="rail-item" data-page="settings" aria-label="Settings"><span class="rail-ico" aria-hidden="true">&#9881;</span><span class="rail-label">Settings</span></button>
-      <a class="small muted" href="/m" style="font-size:10px">mobile</a>
-      <div class="account" id="account">
-        <img class="avatar" src="/static/mascot.png" alt="" width="34" height="34">
-        <div class="account-text">
-          <div class="account-name">Royce AI</div>
-          <div class="account-usage" id="usageLine">checking usage...</div>
+      <button class="rail-item" data-page="settings" aria-label="Settings">
+        <span class="rail-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span class="rail-label">Settings</span>
+      </button>
+      <div class="usage-card" id="usageCard">
+        <div class="usage-row">
+          <img src="/static/mascot.png" alt="" width="34" height="34" class="usage-av">
+          <div>
+            <div class="usage-title">Hourly budget</div>
+            <div class="account-usage" id="usageLine">checking usage…</div>
+          </div>
+        </div>
+        <div class="usage-bar"><span id="usageBarFill"></span></div>
+        <div class="account" id="account" hidden>
+          <img class="avatar" src="/static/mascot.png" alt="" width="34" height="34">
+          <div class="account-text"><div class="account-name">Royce AI</div></div>
         </div>
       </div>
+      <a class="small muted rail-mobile-link" href="/m">Mobile view</a>
     </div>
   </nav>
 
@@ -37,8 +68,11 @@
 
   <main class="main" id="main">
     <header class="topbar">
-      <div class="topbar-title" id="pageTitle">Bots</div>
-      <div class="status-pill" id="statusPill" title="Provider health">checking...</div>
+      <button class="icon-btn side-toggle" id="sideToggle" aria-label="Toggle sidebar" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="topbar-title" id="pageTitle">Sessions</div>
+      <div class="status-pill" id="statusPill" title="Provider health">checking…</div>
     </header>
     <div class="page-body" id="pageBody" tabindex="-1"></div>
   </main>
@@ -47,5 +81,8 @@
 <script src="/static/config.js"></script>
 <script src="/static/api-base.js"></script>
 <script src="/static/workspace.js"></script>
+<script>
+(function(){var b=document.getElementById('sideToggle');if(b){b.addEventListener('click',function(){document.getElementById('side').classList.toggle('open');});}})();
+</script>
 </body>
 </html>
