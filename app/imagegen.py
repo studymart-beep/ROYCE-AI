@@ -35,6 +35,8 @@ def generate(prompt, timeout=90):
         raise ImageError("image generation needs a prompt")
     if not _key():
         raise ImageError("image generation (openrouter): OPENROUTER_API_KEY is not set")
+    from .agent import budget
+    budget.consume()  # shared budget: reserved before the call, failures count too
     body = json.dumps({
         "model": model(),
         "messages": [{"role": "user", "content": prompt}],

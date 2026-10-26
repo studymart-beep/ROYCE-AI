@@ -108,12 +108,17 @@ def run_step(step, sleep=time.sleep):
     inp = step.get("input") or {}
     _need(inp, required)
     last = None
+    from . import budget
     for attempt in range(MAX_RETRIES + 1):
+        # llm steps reserve their budget slot inside the router (per provider attempt);
+        # every other engine reserves here, before each attempt, retries included.
+        if eng != "llm":
+            budget.consume()
         try:
             out = runner(inp)
             return verify(out, shape)
-        except StepError:
-            raise  # bad input or a deterministic refusal: do not retry
+        except (StepError, budget.BudgetExceeded):
+            raise  # bad input, a deterministic refusal, or an exhausted budget: do not retry
         except Exception as e:
             last = e
             if attempt < MAX_RETRIES:

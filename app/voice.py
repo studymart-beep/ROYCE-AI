@@ -93,6 +93,8 @@ def tts(text):
     if not text:
         raise VoiceUnavailable("nothing to say")
     text = text[:MAX_CHARS]
+    from .agent import budget
+    budget.consume()  # shared budget: reserved before any provider call
     errors = []
     for name, fn in PROVIDERS:
         try:

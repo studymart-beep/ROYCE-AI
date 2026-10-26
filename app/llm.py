@@ -20,19 +20,17 @@ ORDER = ["gemini", "openrouter"]  # kept for backward compatibility; the router 
 def chat_text(messages, temperature=0.8, timeout=20, provider=None):
     """Text chat through the model router (health + capability aware, gemini primary by default)."""
     from .agent import router, budget
-    budget.consume()
     s = load_settings()
     pref = provider or s.get("default_provider", DEFAULT_PROVIDER)
     def _one(pid):
         return _post_chat(pid, messages, temperature, timeout).strip()
-    return router.call(_one, capability="chat", preferred=pref)
+    return router.call(_one, capability="chat", preferred=pref, before_attempt=budget.consume)
 
 def chat_vision(messages, image_bytes, mime="image/jpeg", temperature=0.5, timeout=60):
     """Send one image with a text prompt through the same OpenAI-compatible endpoints, routed by capability 'vision'.
     messages: system/history list; the last user message text is attached to the image."""
     import base64
     from .agent import router, budget
-    budget.consume()
     b64 = base64.b64encode(image_bytes).decode()
     url = f"data:{mime};base64,{b64}"
     s = load_settings()
@@ -45,7 +43,7 @@ def chat_vision(messages, image_bytes, mime="image/jpeg", temperature=0.5, timeo
             {"type": "image_url", "image_url": {"url": url}},
         ]}]
         return _post_chat(pid, model_msgs, temperature, timeout).strip()
-    return router.call(_one, capability="vision", preferred=pref)
+    return router.call(_one, capability="vision", preferred=pref, before_attempt=budget.consume)
 
 SCRIPT_SYSTEM = (
     "You are Royce AI, the ad-creative engine for Royce Marketing Agency (Lagos, Nigeria). "
