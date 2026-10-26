@@ -1,3 +1,4 @@
+from . import audit
 """Approval queue: sends and other approval-gated actions wait here until /approve <id>.
 
 Stored in approvals.json at the project root (git-ignored). Each record is bound to the
@@ -71,6 +72,7 @@ def approve(chat_id, rid):
     try:
         result = fn(rec["payload"])
         status, msg = DONE, f"approved #{rid}: done"
+        audit.record("user", "approval_granted", rec["action_class"], "done")
     except Exception as e:
         result, status, msg = str(e)[:300], FAILED, f"approved #{rid} but it failed: {str(e)[:200]}"
     with _LOCK:

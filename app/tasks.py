@@ -14,6 +14,7 @@ check blobs:
   {"type": "manual"}                      never auto-resolves; the user sees it in /tasks
 """
 import json, os, threading, uuid, datetime
+from .agent import audit
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PATH = os.path.join(BASE, "tasks.json")
@@ -57,6 +58,7 @@ def add_task(chat_id, description, status="open", check=None, note=""):
         }
         items.append(t)
         _save(items)
+        audit.record("bot", "task_created", f"task:{t['id']}", status)
         return dict(t)
 
 
@@ -91,7 +93,9 @@ def _set(task_id, **fields):
 
 
 def complete_task(task_id, note=""):
-    return _set(task_id, status="done", note=note or "done")
+    out = _set(task_id, status="done", note=note or "done")
+    audit.record("bot", "task_completed", f"task:{task_id}", "done")
+    return out
 
 
 def mark_unavailable(task_id, note, check=None):
