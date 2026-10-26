@@ -4,3 +4,4 @@ settings.json
 __pycache__/
 .venv/
 bot_state*
+collectors.json

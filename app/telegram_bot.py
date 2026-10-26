@@ -1,6 +1,6 @@
 import json, os, re, time, urllib.request, urllib.parse
 from .llm import chat_text, generate_script_package
-from . import db
+from . import db, collectors
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -64,11 +64,56 @@ def crm_snapshot():
     st = ", ".join(f"{k} {v}" for k, v in sorted(s["by_status"].items())) or "none yet"
     return f"Live CRM snapshot: {s['total']} leads total. By status: {st}. {len(s['overdue'])} overdue follow-ups."
 
+REPORT_WORDS = ("report", "performance", "campaign", "campaigns", "spend", "roas", "ctr", "how are the ads", "ads doing", "ad results")
+
+def handle_report(chat_id, text):
+    names = collectors.configured_names()
+    if not names:
+        send(chat_id, (
+            "no ad platforms connected yet. connect at least one so i can pull real numbers:\n\n"
+            "• meta: system user token + ad account id. in Meta Business Settings > Users > System users, "
+            "create a system user, assign your ad account, generate a token with ads_read. "
+            "account id is the number after act_ in your ad account.\n"
+            "• tiktok: business api access token from your TikTok for Business developer app, plus the advertiser id.\n"
+            "• google ads: coming soon (needs oauth + developer token).\n\n"
+            "paste them in the reporting page of royce ai."))
+        return
+    preset = "last_7d"
+    for p, words in (("yesterday", ("yesterday",)), ("today", ("today",)), ("last_30d", ("30 days", "month")), ("last_14d", ("14 days", "two weeks")), ("last_7d", ("7 days", "week"))):
+        if any(w in text.lower() for w in words):
+            preset = p
+            break
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    rows, errors = collectors.fetch_all(preset)
+    if not rows:
+        msg = "pulled from " + ", ".join(names) + " but no campaign rows came back for " + preset + "."
+        if errors:
+            msg += "\n" + "\n".join(f"{e['collector']}: {e['error']}" for e in errors)
+        send(chat_id, msg)
+        return
+    table = "\n".join(f"{r['platform']} | {r['campaign']} | spend {r['spend']} | impr {r['impressions']} | clicks {r['clicks']} | ctr {r['ctr']}% | cpc {r['cpc']}" for r in rows)
+    tot_spend = sum(r["spend"] for r in rows)
+    tot_clicks = sum(r["clicks"] for r in rows)
+    tot_impr = sum(r["impressions"] for r in rows)
+    prompt = (f"Here are the REAL campaign rows for {preset} (use only these numbers, do not invent any):\n{table}\n\n"
+              f"Totals: spend {tot_spend:.2f}, impressions {tot_impr}, clicks {tot_clicks}.\n"
+              f"Write a client-ready summary paragraph of the performance: what worked, what didn't, one clear recommendation. "
+              f"Plain text, no headers, no bullet glyphs, no greeting or self-introduction.")
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+    narrative = chat_text([{"role": "system", "content": sysmsg}, {"role": "user", "content": prompt}], temperature=0.5, timeout=40)
+    footer = "\n\n" + "\n".join(f"{e['collector']}: {e['error']}" for e in errors) if errors else ""
+    send(chat_id, narrative + "\n\n" + table + footer)
+
 def handle_chat(chat_id, text):
     hist = CHAT_HIST.setdefault(chat_id, [])
     api("sendChatAction", chat_id=chat_id, action="typing")
     low = text.lower()
     reply = None
+    if any(w in low for w in REPORT_WORDS) and any(w in low for w in ("report", "performance", "how", "pull", "show", "give", "result", "doing")):
+        handle_report(chat_id, text)
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent campaign report]"}]
+        del hist[:-HIST_MAX]
+        return
     if re.search(r"\b(script|scripts|hooks?|captions?|ad package)\b", low) and re.search(r"\b(make|generate|create|write|give me)\b", low):
         reply = ("Lets do it properly. Give me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
     if reply is None:

@@ -59,14 +59,51 @@ else if(page==='crm'){
   load();
 }
 else if(page==='reporting'){
-  main.innerHTML = `<div class=card><h2>upload ad spend csv</h2>
+  main.innerHTML = `<div class=card><h2>connected platforms</h2>
+  <p style=color:#9a8d7a;font-size:.85rem>tokens are stored on the server and never shown back.</p>
+  <div id=platforms class=empty>loading…</div></div>
+  <div class=card><h2>pull report</h2>
+  <select id=preset><option value=last_7d>last 7 days</option><option value=last_14d>last 14 days</option><option value=last_30d>last 30 days</option><option value=yesterday>yesterday</option><option value=today>today</option></select>
+  <button onclick=pull()>📊 pull report</button></div>
+  <div class=card><h2>upload ad spend csv</h2>
   <p style=color:#9a8d7a;font-size:.85rem>columns: campaign, spend, impressions, clicks</p>
   <input type=file id=csv accept=.csv><button onclick=up()>📊 analyze</button></div><div id=out></div>`;
+  const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const table = rows => `<div class=card><table><tr><th>platform</th><th>campaign</th><th>spend</th><th>impr</th><th>clicks</th><th>ctr</th><th>cpc</th></tr>
+    ${rows.map(r=>`<tr><td>${esc(r.platform)}</td><td>${esc(r.campaign)}</td><td>${r.spend}</td><td>${r.impressions}</td><td>${r.clicks}</td><td>${r.ctr}%</td><td>${r.cpc}</td></tr>`).join('')}</table></div>`;
+  const loadPlatforms = async () => {
+    const st = await (await fetch('/api/collectors')).json();
+    document.getElementById('platforms').outerHTML = `<div id=platforms>` + Object.entries(st).map(([name,c])=>`
+      <div style="margin:12px 0;padding-top:10px;border-top:1px solid #2a2118">
+        <p><span class=dot style="${c.configured?'':'opacity:.25'}"></span><b>${esc(c.label)}</b> ${c.configured?'<span style=color:#9a8d7a>connected ('+esc(c.account_id)+')</span>':'<span style=color:#9a8d7a>not connected</span>'}</p>
+        <p style=color:#9a8d7a;font-size:.8rem>${esc(c.token_help)}</p>
+        ${name==='google' ? '' : `<input id=tok-${name} placeholder="access token" type=password><input id=acc-${name} placeholder="${esc(c.account_label)}"><button onclick="saveC('${name}')">save</button> <button onclick="testC('${name}')">test</button><div id=msg-${name} style=font-size:.85rem;color:#9a8d7a></div>`}
+      </div>`).join('') + `</div>`;
+  };
+  window.saveC = async (name) => {
+    const r = await fetch('/api/collectors',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,token:document.getElementById('tok-'+name).value,account_id:document.getElementById('acc-'+name).value})});
+    const j = await r.json();
+    document.getElementById('msg-'+name).textContent = r.ok ? 'saved' : (j.error||'save failed');
+    if(r.ok) loadPlatforms();
+  };
+  window.testC = async (name) => {
+    const m = document.getElementById('msg-'+name); m.textContent = 'testing…';
+    const r = await fetch(`/api/collectors/${name}/test`,{method:'POST'});
+    const j = await r.json();
+    m.textContent = j.ok ? `live ✓ ${j.account_name||''}` : (j.error||'test failed');
+  };
+  window.pull = async () => {
+    out.innerHTML = Array(4).fill('<div class=skeleton></div>').join('');
+    const r = await fetch('/api/report/all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preset:preset.value})});
+    const j = await r.json();
+    if(!r.ok){ out.innerHTML = `<div class=card><p>${esc(j.error)}</p></div>`; return; }
+    out.innerHTML = (j.errors||[]).map(e=>`<div class=card><p>${esc(e.collector)}: ${esc(e.error)}</p></div>`).join('') + (j.rows.length ? table(j.rows) : '<div class=card><p>no campaign rows for this period</p></div>');
+  };
   window.up = async () => {
     const fd = new FormData(); fd.append('file', csv.files[0]);
     out.innerHTML = Array(4).fill('<div class=skeleton></div>').join('');
     const rows = await (await fetch('/api/report/upload',{method:'POST',body:fd})).json();
-    out.innerHTML = `<div class=card><table><tr><th>campaign</th><th>spend</th><th>impr</th><th>clicks</th><th>ctr</th><th>cpc</th></tr>
-    ${rows.map(r=>`<tr><td>${r.campaign}</td><td>${r.spend}</td><td>${r.impressions}</td><td>${r.clicks}</td><td>${r.ctr}%</td><td>${r.cpc}</td></tr>`).join('')}</table></div>`;
+    out.innerHTML = table(rows.map(r=>({platform:'csv',...r})));
   };
+  loadPlatforms();
 }
