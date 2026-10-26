@@ -1,0 +1,6 @@
+.env
+crm.db
+settings.json
+__pycache__/
+.venv/
+bot_state*
