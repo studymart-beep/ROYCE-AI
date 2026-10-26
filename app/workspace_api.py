@@ -7,7 +7,7 @@ Reuses the same modules the Telegram bot uses: chat_text, chatplan, approvals, m
 budget and audit. The web chat binds one shared budget bucket ("web"), so the hourly cap is shared
 by all web conversations and cannot be multiplied by creating new chats.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from . import conversations
@@ -19,14 +19,57 @@ MAX_MESSAGE = 4000
 
 
 class ChatIn(BaseModel):
-    message: str = Field(min_length=1, max_length=MAX_MESSAGE)
+    message: str = Field(default="", max_length=MAX_MESSAGE)
     conversation_id: str | None = None
     bot_id: str | None = Field(default=None, max_length=40)
+    # served urls returned by POST /api/ws/upload; resolved server-side, never trusted as paths
+    attachments: list[str] = Field(default_factory=list, max_length=4)
 
 
 def _llm_chat(msgs, **kw):
     from .llm import chat_text
     return chat_text(msgs, **kw)
+
+
+def _llm_vision(images):
+    """Chat function for a turn with images: same router and vision capability as the telegram photo path."""
+    from .llm import chat_vision_many
+    def run(msgs, **kw):
+        return chat_vision_many(msgs, images, temperature=kw.get("temperature", 0.5), timeout=kw.get("timeout", 60))
+    return run
+
+
+def _resolve_attachments(urls):
+    """Turn attachment urls into (images, docs_text_block, refs). Unknown or unsafe urls are a 400."""
+    from . import uploads
+    images, texts, refs = [], [], []
+    for url in urls or []:
+        info = uploads.resolve(url)
+        if info is None:
+            raise HTTPException(400, {"error": "bad_attachment", "message": "an attachment is missing or was not uploaded here"})
+        refs.append(info)
+        if info["kind"] == "image":
+            with open(info["path"], "rb") as f:
+                images.append((f.read(), info["type"]))
+        else:
+            text, note = uploads.extract_text(info)
+            if text:
+                texts.append(f"[file: {info['name']}]\n{text}")
+            else:
+                texts.append(f"[file: {info['name']}] ({note})")
+    return images, texts, refs
+
+
+def _with_attachments(text, images, texts, refs):
+    """The prompt the model sees: extracted document text first, then the user's words, then one line per attachment."""
+    parts = []
+    if texts:
+        parts.append("\n\n".join(texts))
+    parts.append(text or "(no message, just the attachment)")
+    notes = [("[attached image: %s]" % r["name"]) for r in refs if r["kind"] == "image"]
+    if notes:
+        parts.append("\n".join(notes))
+    return "\n\n".join(parts)
 
 
 def memory_block(text, chat_id):
@@ -43,9 +86,9 @@ def _system_prompt(text):
     return SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text) + skills.coding_block(text)
 
 
-def _direct_reply(text, history):
+def _direct_reply(text, history, chat_fn=None):
     msgs = [{"role": "system", "content": _system_prompt(text)}] + history[-20:] + [{"role": "user", "content": text}]
-    return _llm_chat(msgs, timeout=40)
+    return (chat_fn or _llm_chat)(msgs, timeout=40)
 
 
 def _sanitize(t):
@@ -59,18 +102,24 @@ def chat(body: ChatIn):
 
     Returns {conversation_id, reply, task_id, status}. A budget or provider failure returns an error and
     stores nothing, so a retry from the UI cannot duplicate the user's message.
+    Attachments (served urls from /api/ws/upload) go to the model: images as vision parts, documents as
+    extracted text in the prompt. They are stored on the user message so history re-renders them.
     """
     text = body.message.strip()
-    if not text:
-        raise HTTPException(400, "empty message")
+    if not text and not body.attachments:
+        raise HTTPException(422, "empty message")
+    from . import uploads
+    images, texts, refs = _resolve_attachments(body.attachments)
+    stored = uploads.serialize(refs)
+    prompt = _with_attachments(text, images, texts, refs) if refs else text
     history = conversations.history(body.conversation_id)
     bot = _active_bot(body.bot_id)
     if bot is not None:
-        return _bot_chat(body, text, history, bot)
+        return _bot_chat(body, text, history, bot, prompt=prompt, images=images, stored=stored)
     token = budget.bind(WEB_BUCKET)
     try:
         task_id = None
-        if chatplan.looks_multi_step(text):
+        if not refs and chatplan.looks_multi_step(text):
             task_id, reason = chatplan.start(WEB_BUCKET, text, chat_fn=lambda m: _llm_chat(m, temperature=0, timeout=20))
             if task_id is None:
                 reply = _sanitize("i couldn't put that into safe steps: " + reason + ". try asking one step at a time.")
@@ -80,7 +129,7 @@ def chat(body: ChatIn):
                 reply = _sanitize(chatplan.summary(rec))
                 status = rec.get("status")
         else:
-            reply = _sanitize(_direct_reply(text, history))
+            reply = _sanitize(_direct_reply(prompt, history, chat_fn=_llm_vision(images) if images else None))
             status = "completed"
     except budget.BudgetExceeded as e:
         raise HTTPException(429, {"error": "budget", "message": str(e), "retry_after": e.retry_after})
@@ -89,7 +138,7 @@ def chat(body: ChatIn):
         raise HTTPException(503, {"error": "provider", "message": str(e)[:300]})
     finally:
         budget.unbind(token)
-    conv = conversations.append_exchange(body.conversation_id, text, reply, task_id=task_id)
+    conv = conversations.append_exchange(body.conversation_id, text, reply, task_id=task_id, attachments=stored)
     return {"conversation_id": conv["id"], "reply": reply, "task_id": task_id, "status": status}
 
 
@@ -104,17 +153,20 @@ def _active_bot(bot_id):
     return bot
 
 
-def _bot_chat(body, text, history, bot):
-    """Chat through a bot. The Chief of Staff routes to specialists; a specialist answers with its own playbook."""
+def _bot_chat(body, text, history, bot, prompt=None, images=None, stored=None):
+    """Chat through a bot. The Chief of Staff routes to specialists; a specialist answers with its own playbook.
+    With attachments, the prompt carries the document text and images go to the vision path (direct answer)."""
     from . import bots, chief
     from .llm import chat_text
+    prompt = prompt if prompt is not None else text
     token = budget.bind(WEB_BUCKET)
     try:
-        if bots.is_coordinator(bot):
-            res = chief.run(text, history, bot, chat=lambda m, **kw: chat_text(m, **kw), sanitize=_sanitize)
+        if bots.is_coordinator(bot) and not images:
+            res = chief.run(prompt, history, bot, chat=lambda m, **kw: chat_text(m, **kw), sanitize=_sanitize)
             reply, status, delegations = res["reply"], res["status"], res["delegations"]
         else:
-            reply = _sanitize(chief._direct(bot, text, history, lambda m, **kw: chat_text(m, **kw)))
+            chat_fn = _llm_vision(images) if images else (lambda m, **kw: chat_text(m, **kw))
+            reply = _sanitize(chief._direct(bot, prompt, history, chat_fn))
             status, delegations = "completed", []
     except budget.BudgetExceeded as e:
         raise HTTPException(429, {"error": "budget", "message": str(e), "retry_after": e.retry_after})
@@ -123,9 +175,18 @@ def _bot_chat(body, text, history, bot):
     finally:
         budget.unbind(token)
     meta = {"bot_id": bot["id"], "bot_name": bot["name"], "delegations": delegations} if delegations else {"bot_id": bot["id"], "bot_name": bot["name"]}
-    conv = conversations.append_exchange(body.conversation_id, text, reply, meta=meta, bot_id=bot["id"])
+    conv = conversations.append_exchange(body.conversation_id, text, reply, meta=meta, bot_id=bot["id"], attachments=stored)
     return {"conversation_id": conv["id"], "reply": reply, "task_id": None, "status": status,
             "bot": {"id": bot["id"], "name": bot["name"]}, "delegations": delegations}
+
+
+@router.post("/upload")
+def upload(file: UploadFile = File(...), conversation_id: str | None = Form(default=None)):
+    """One file for the chat: image (png, jpg, webp, 10 MB) or document (pdf, txt, csv, docx, 20 MB).
+    Returns {url, name, type, size, kind}. Send the url back in /chat attachments."""
+    from . import uploads
+    info = uploads.store(conversation_id, file.filename or "", file.file, file.content_type or "")
+    return info
 
 
 @router.get("/conversations")

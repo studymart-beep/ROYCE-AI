@@ -31,19 +31,22 @@ def chat_text(messages, temperature=0.8, timeout=20, provider=None):
 def chat_vision(messages, image_bytes, mime="image/jpeg", temperature=0.5, timeout=60):
     """Send one image with a text prompt through the same OpenAI-compatible endpoints, routed by capability 'vision'.
     messages: system/history list; the last user message text is attached to the image."""
+    return chat_vision_many(messages, [(image_bytes, mime)], temperature=temperature, timeout=timeout)
+
+def chat_vision_many(messages, images, temperature=0.5, timeout=60):
+    """Same vision path for one or more images: images is a list of (bytes, mime). The last user message
+    text is the prompt; every image becomes an image_url part on that same user turn."""
     import base64
     from .agent import router, budget
-    b64 = base64.b64encode(image_bytes).decode()
-    url = f"data:{mime};base64,{b64}"
+    parts = [(f"data:{mime};base64," + base64.b64encode(data).decode()) for data, mime in images]
     s = load_settings()
     pref = s.get("default_provider", DEFAULT_PROVIDER)
     prompt_text = messages[-1]["content"]
     head = messages[:-1]
     def _one(pid):
-        model_msgs = head + [{"role": "user", "content": [
-            {"type": "text", "text": prompt_text},
-            {"type": "image_url", "image_url": {"url": url}},
-        ]}]
+        content = [{"type": "text", "text": prompt_text}]
+        content += [{"type": "image_url", "image_url": {"url": url}} for url in parts]
+        model_msgs = head + [{"role": "user", "content": content}]
         return _post_chat(pid, model_msgs, temperature, timeout).strip()
     return router.call(_one, capability="vision", preferred=pref, before_attempt=budget.consume)
 

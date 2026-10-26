@@ -36,7 +36,7 @@ def _title(text):
     return t if len(t) <= TITLE_MAX else t[: TITLE_MAX - 3].rstrip() + "..."
 
 
-def append_exchange(conv_id, user_text, reply, task_id=None, meta=None, bot_id=None):
+def append_exchange(conv_id, user_text, reply, task_id=None, meta=None, bot_id=None, attachments=None):
     """Store one completed exchange. Creates the conversation when conv_id is None or unknown.
 
     bot_id binds a new conversation to one bot (null for plain chat and for legacy rows).
@@ -50,7 +50,10 @@ def append_exchange(conv_id, user_text, reply, task_id=None, meta=None, bot_id=N
             d[conv_id] = {"id": conv_id, "title": _title(user_text), "created_at": now, "updated_at": now,
                           "bot_id": bot_id or None, "messages": []}
         conv = d[conv_id]
-        conv["messages"].append({"role": "user", "text": user_text, "ts": now})
+        user_msg = {"role": "user", "text": user_text, "ts": now}
+        if attachments:
+            user_msg["attachments"] = attachments  # served urls + name/type/size/kind, so history re-renders them
+        conv["messages"].append(user_msg)
         assistant = {"role": "assistant", "text": reply, "ts": now}
         if task_id:
             assistant["task_id"] = task_id

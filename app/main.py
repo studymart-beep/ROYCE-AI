@@ -85,5 +85,7 @@ def service_worker():
                         headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
 from .workspace_api import router as workspace_router
 app.include_router(workspace_router)
+from .uploads import router as uploads_router
+app.include_router(uploads_router)  # GET /uploads/<conv>/<file>: served chat attachments, traversal-safe
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
