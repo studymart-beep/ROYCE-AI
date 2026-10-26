@@ -125,3 +125,25 @@ def _block(names):
         return ""
     return ("\n\nMARKETING PLAYBOOKS (use these frameworks where they apply, do not recite them):\n\n"
             + "\n\n".join(parts))
+
+
+CODING_DIR = os.path.join(SKILLS_DIR, "coding")
+CODING_TRIGGERS = re.compile(
+    r"\b(debug|debugging|bug|bugs|traceback|stack ?trace|error|exception|failing|failed test|"
+    r"explain (the )?code|read (the )?code|codebase|repo|repository|refactor|why (is|does) (it|this) (fail|break))\b",
+    re.I)
+
+
+def coding_block(text):
+    """Return the coding playbooks (codebase, debugging) when the message is about code. Else ''."""
+    if not CODING_TRIGGERS.search(text or ""):
+        return ""
+    parts = []
+    for name in ("codebase", "debugging"):
+        p = os.path.join(CODING_DIR, name + ".md")
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8") as f:
+                _, body = _parse(f.read())
+            parts.append(body)
+    return ("\n\n## Coding playbooks\n" + "\n\n".join(parts)) if parts else ""
+

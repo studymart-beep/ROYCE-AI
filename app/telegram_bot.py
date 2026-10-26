@@ -215,7 +215,7 @@ def memory_block(text, chat_id=None):
 
 def do_chat(text, hist=None, chat_id=None):
     mem = memory_block(text, chat_id)
-    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text)
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text) + skills.coding_block(text)
     msgs = [{"role": "system", "content": sysmsg}] + (hist[-HIST_MAX:] if hist else []) + [{"role": "user", "content": text}]
     return chat_text(msgs, timeout=40)
 
@@ -442,7 +442,7 @@ def handle_chat(chat_id, text):
             del hist[:-HIST_MAX]
             return
         mem = memory_block(text, chat_id)
-        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text)
+        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text) + skills.coding_block(text)
         reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
     hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
     del hist[:-HIST_MAX]
