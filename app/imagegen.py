@@ -7,7 +7,7 @@ Raises ImageError with the name of the service that failed. Nothing is faked.
 import base64, json, os, re, urllib.request, urllib.error
 
 BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "google/gemini-2.5-flash-image-preview"
+DEFAULT_MODEL = "google/gemini-2.5-flash-image"
 
 
 class ImageError(Exception):
