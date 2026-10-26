@@ -1,4 +1,4 @@
-import json, os, re, time, urllib.request, urllib.parse
+import json, os, re, threading, time, urllib.request, urllib.parse
 from .llm import chat_text, chat_vision, generate_script_package
 from . import imagegen
 from . import db, collectors, workstore, tasks
@@ -89,13 +89,30 @@ def send(chat_id, text):
         chunk, text = text[:3900], text[3900:]
         api("sendMessage", chat_id=chat_id, text=chunk)
 
+ENV_TOKEN_KEY = "TELEGRAM_BOT_TOKEN"
+
+def _token_from_env_file():
+    try:
+        with open(os.path.join(BASE, ".env")) as f:
+            for line in f:
+                if line.startswith(ENV_TOKEN_KEY + "="):
+                    return line.split("=", 1)[1].strip()
+    except FileNotFoundError:
+        pass
+    return ""
+
+def token_configured():
+    """True when a bot token is set in the environment or .env. Never returns the value."""
+    return bool(os.environ.get(ENV_TOKEN_KEY, "").strip()) or bool(_token_from_env_file())
+
 def get_env():
+    # Render sets the token as an env var (dashboard); locally it comes from .env. Env wins.
     global TOKEN, API
     if TOKEN: return
-    with open(os.path.join(BASE, ".env")) as f:
-        for line in f:
-            if line.startswith("TELEGRAM_BOT_TOKEN="):
-                TOKEN = line.split("=", 1)[1].strip()
+    tok = os.environ.get(ENV_TOKEN_KEY, "").strip() or _token_from_env_file()
+    if not tok:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set (env var or .env)")
+    TOKEN = tok
     API = f"https://api.telegram.org/bot{TOKEN}"
 
 def get_updates(offset=None):
@@ -711,9 +728,9 @@ def _on_signal(signum, frame):
     chatplan.STOP_EVENT.set()
     raise SystemExit(0)
 
-def main():
-    global TOKEN, API
-    import signal
+def _setup_bot():
+    """One-time startup: verify the token (getMe), recover interrupted tasks, start background jobs.
+    Raises if Telegram is unreachable or the token is rejected; the caller decides whether to retry."""
     from .agent import chatplan
     get_env()
     me = api("getMe")
@@ -721,13 +738,17 @@ def main():
     n = chatplan.recover_on_start()
     if n:
         print(f"[bot] marked {n} interrupted task(s) as failed (not repeated)", flush=True)
-    signal.signal(signal.SIGTERM, _on_signal)
     jobs.start()
     audit.record("bot", "bot_started", "telegram", "ok")
+
+def poll_forever(stop_event):
+    """The getUpdates long-poll loop. Its offset is local to this call (stateless per poll), so one
+    background thread is safe. Returns once stop_event is set (checked between polls; a poll in flight
+    finishes within its 50s server timeout, so callers join with a timeout)."""
     offset = None
     last_check = 0
     last_cleanup = 0
-    while True:
+    while not stop_event.is_set():
         try:
             data = get_updates(offset)
             for u in data.get("result", []):
@@ -735,7 +756,8 @@ def main():
                 handle_update(u)
         except Exception as e:
             print(f"[bot] poll error: {e}", flush=True)
-            time.sleep(3)
+            if stop_event.wait(3):
+                break
         if time.time() - last_check >= RETRY_EVERY:
             last_check = time.time()
             try:
@@ -757,6 +779,13 @@ def main():
                     audit.record("bot", "group_messages_expired", "telegram", f"rows={sum(removed.values())}")
             except Exception as e:
                 print(f"[bot] group cleanup error: {e}", flush=True)
+
+def main():
+    # standalone entry point (python -m app.telegram_bot): same behaviour as before, SIGTERM stops safely
+    import signal
+    _setup_bot()
+    signal.signal(signal.SIGTERM, _on_signal)
+    poll_forever(threading.Event())
 
 if __name__ == "__main__":
     main()

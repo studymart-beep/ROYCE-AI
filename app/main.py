@@ -12,7 +12,25 @@ from . import workstore
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(BASE, "app", "static")
-app = FastAPI(title="Royce AI")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _lifespan(_app):
+    # Telegram bot runs in-process (one poll thread, guarded). Startup never waits on Telegram:
+    # the thread does the getMe check and retries with backoff. Shutdown stops and joins it.
+    from . import bot_runner
+    try:
+        bot_runner.start_bot_thread()
+    except Exception as e:
+        print(f"[bot] could not start telegram thread: {type(e).__name__}: {e}", flush=True)
+    try:
+        yield
+    finally:
+        bot_runner.stop_bot_thread(timeout=10)
+
+
+app = FastAPI(title="Royce AI", lifespan=_lifespan)
 
 DEFAULT_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:1420", "http://tauri.localhost", "tauri://localhost"]
 
