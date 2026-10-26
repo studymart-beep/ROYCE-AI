@@ -9,7 +9,8 @@ import json, os, threading, time, uuid
 from . import permissions
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PATH = os.path.join(BASE, "approvals.json")
+from ..paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "approvals.json")
 _LOCK = threading.Lock()
 _EXECUTORS = {}  # action_class -> callable(payload) -> result
 PENDING, DONE, FAILED = "pending", "done", "failed"

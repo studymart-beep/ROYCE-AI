@@ -7,7 +7,8 @@ never returned by the API; only configured/not-configured status is exposed.
 import json, os, datetime, imaplib, email, email.utils, email.header, urllib.request, urllib.parse, urllib.error
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_PATH = os.path.join(BASE, "collectors.json")
+from .paths import DATA_DIR
+CONFIG_PATH = os.path.join(DATA_DIR, "collectors.json")
 NORMAL_FIELDS = ("platform", "campaign", "spend", "impressions", "clicks", "ctr", "cpc")
 
 

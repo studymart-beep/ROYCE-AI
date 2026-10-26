@@ -1,7 +1,8 @@
 import json, os
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SETTINGS_PATH = os.path.join(BASE, "settings.json")
+from .paths import DATA_DIR
+SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
 
 PROVIDERS = {
     "gemini": {

@@ -23,8 +23,9 @@ import urllib.request
 from . import audit
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE, "crm.db")
-BACKUP_DIR = os.path.join(BASE, "backups")
+from ..paths import DATA_DIR
+DB_PATH = os.path.join(DATA_DIR, "crm.db")
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 BACKUP_KEEP = 10
 TEST_TIMEOUT = 300
 GIT_TIMEOUT = 20

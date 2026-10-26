@@ -17,7 +17,8 @@ import json, os, threading, uuid, datetime
 from .agent import audit
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATH = os.path.join(BASE, "tasks.json")
+from .paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "tasks.json")
 STATUSES = ("open", "done", "unavailable")
 _LOCK = threading.Lock()
 

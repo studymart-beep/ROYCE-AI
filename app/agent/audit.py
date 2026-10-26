@@ -15,7 +15,8 @@ import re
 import threading
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PATH = os.path.join(BASE, "logs", "audit.jsonl")
+from ..paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "logs", "audit.jsonl")
 _LOCK = threading.Lock()
 MAX_LEN = 120
 # anything that looks like a credential is replaced, not written

@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from . import db
 from .scripts_engine import build_script_prompt, normalize_script
@@ -12,6 +13,32 @@ from . import workstore
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(BASE, "app", "static")
 app = FastAPI(title="Royce AI")
+
+DEFAULT_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:1420", "http://tauri.localhost", "tauri://localhost"]
+
+
+def allowed_origins(raw=None):
+    """Origins from ALLOWED_ORIGINS (comma-separated). Never a wildcard: '*' is dropped with the rest.
+    Unset means the localhost defaults. Auth is a header token, not cookies, so credentials stay off."""
+    raw = os.environ.get("ALLOWED_ORIGINS", "") if raw is None else raw
+    if not raw.strip():
+        return list(DEFAULT_ORIGINS)
+    out = []
+    for item in raw.split(","):
+        o = item.strip().rstrip("/")
+        if o and o != "*" and o not in out:
+            out.append(o)
+    return out
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["content-type", "authorization", "x-workspace-token"],
+    max_age=600,
+)
 
 @app.get("/healthz")
 def healthz(): return {"ok": True}
@@ -34,6 +61,15 @@ def crm_page(): return FileResponse(os.path.join(STATIC, "crm.html"))
 def reporting_page(): return FileResponse(os.path.join(STATIC, "reporting.html"))
 @app.get("/workspace")
 def workspace_page(): return FileResponse(os.path.join(STATIC, "workspace.html"))
+@app.get("/m")
+def mobile_page(): return FileResponse(os.path.join(STATIC, "mobile.html"), headers={"Cache-Control": "no-cache"})
+@app.get("/offline")
+def offline_page(): return FileResponse(os.path.join(STATIC, "offline.html"))
+@app.get("/sw.js")
+def service_worker():
+    # served from the root so its scope covers /workspace and /m; never cached by the browser
+    return FileResponse(os.path.join(STATIC, "sw.js"), media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
 @app.get("/connectors")
 def connectors_page(): return FileResponse(os.path.join(STATIC, "connectors.html"))
 

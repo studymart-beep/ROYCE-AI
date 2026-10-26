@@ -9,7 +9,8 @@ A conservative heuristic (detect) saves only explicit statements:
 import json, os, re, threading, time
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PATH = os.path.join(BASE, "memory.json")
+from ..paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "memory.json")
 _LOCK = threading.Lock()
 STOP = {"the", "a", "an", "and", "or", "of", "to", "in", "is", "it", "that", "this", "for", "on", "with", "we", "i", "my", "our", "be"}
 

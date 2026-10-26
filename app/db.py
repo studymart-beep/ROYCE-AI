@@ -1,7 +1,8 @@
 import sqlite3, os
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(BASE, "crm.db")
+from .paths import DATA_DIR
+DB = os.path.join(DATA_DIR, "crm.db")
 
 def conn():
     c = sqlite3.connect(DB)

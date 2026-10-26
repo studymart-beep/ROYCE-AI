@@ -6,7 +6,8 @@ The mini app's Generated Work page reads it newest first.
 import datetime, json, os, threading, uuid
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATH = os.path.join(BASE, "work.json")
+from .paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "work.json")
 _lock = threading.Lock()
 
 

@@ -9,7 +9,8 @@ never duplicates the user's message.
 import json, os, threading, time, uuid
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATH = os.path.join(BASE, "conversations.json")
+from .paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "conversations.json")
 _LOCK = threading.Lock()
 TITLE_MAX = 60
 

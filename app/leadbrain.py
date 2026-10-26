@@ -13,7 +13,8 @@ from . import skills
 from .style import VOICE_RULES, sanitize
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATE_PATH = os.path.join(BASE, "nudge_state.json")
+from .paths import DATA_DIR
+STATE_PATH = os.path.join(DATA_DIR, "nudge_state.json")
 TZ = ZoneInfo("Africa/Lagos")
 CHECK_EVERY = 3600  # run the nudge check at most once an hour
 OWNER_CHAT_ID = int(os.environ.get("OWNER_CHAT_ID", "7531626960"))  # fallback until the owner has messaged the bot

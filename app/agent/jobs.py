@@ -22,7 +22,8 @@ from . import audit, router, tools
 from ..config import PROVIDERS, provider_status
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-HEALTH_PATH = os.path.join(BASE, "logs", "health.json")
+from ..paths import DATA_DIR
+HEALTH_PATH = os.path.join(DATA_DIR, "logs", "health.json")
 BACKUP_EVERY = 6 * 3600
 CHECK_EVERY = 3600
 MIN_FREE_BYTES = 200 * 1024 * 1024  # warn below 200 MB free
@@ -74,7 +75,7 @@ def self_check(health_path=None):
 
 
 def _last_backup_note():
-    folder = os.path.join(BASE, "backups")
+    folder = os.path.join(DATA_DIR, "backups")
     try:
         files = sorted(f for f in os.listdir(folder) if f.startswith("crm-") and f.endswith(".db"))
     except FileNotFoundError:

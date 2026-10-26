@@ -24,7 +24,8 @@ import json, os, re, threading, time, uuid
 from . import audit, budget, orchestrator, permissions, planner
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PATH = os.path.join(BASE, "chat_tasks.json")
+from ..paths import DATA_DIR
+PATH = os.path.join(DATA_DIR, "chat_tasks.json")
 _LOCK = threading.Lock()
 STOP_EVENT = threading.Event()  # set by the bot on SIGTERM/SIGINT for a safe stop between steps
 
