@@ -40,11 +40,11 @@ def test_toggle_persists_and_unknown_name_refused(sandbox):
         tools.set_enabled("rm_rf", False)
 
 
-def test_toggle_endpoint_requires_owner_and_persists(sandbox, monkeypatch):
+def test_toggle_endpoint_open_access_and_persists(sandbox, monkeypatch):
     from app.main import app
     monkeypatch.setenv("WORKSPACE_TOKEN", "tok-123")
     c = TestClient(app)
-    assert c.get("/api/ws/tools").status_code == 401
+    assert c.get("/api/ws/tools").status_code == 200
     h = {"x-workspace-token": "tok-123"}
     r = c.put("/api/ws/tools/health_check", json={"enabled": False}, headers=h)
     assert r.status_code == 200 and r.json()["enabled"] is False
@@ -68,12 +68,12 @@ def test_skill_save_writes_file_and_rejects_traversal(sandbox, monkeypatch, tmp_
         skills.save_skill("missing-one", "x")
 
 
-def test_usage_and_messaging_endpoints_need_owner(sandbox, monkeypatch):
+def test_usage_and_messaging_endpoints_open_access(sandbox, monkeypatch):
     from app.main import app
     monkeypatch.setenv("WORKSPACE_TOKEN", "tok-123")
     c = TestClient(app)
     h = {"x-workspace-token": "tok-123"}
-    assert c.get("/api/ws/usage").status_code == 401
+    assert c.get("/api/ws/usage").status_code == 200
     u = c.get("/api/ws/usage", headers=h)
     assert u.status_code == 200 and "remaining_this_hour" in u.json()
     assert c.get("/api/ws/messaging", headers=h).status_code == 200

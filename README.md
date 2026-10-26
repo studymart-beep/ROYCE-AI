@@ -115,14 +115,11 @@ The workspace is a single-page web app served by the same FastAPI server. It is 
 desktop build. In Chrome or Edge on Windows you can install it as an app (see below), which gives it its own
 window and launcher icon. No native .exe is built or shipped.
 
-Set an owner token in .env (any long random string). The workspace refuses its APIs without it, so the public
-tunnel never exposes chat, memory or approvals:
+OPEN ACCESS (owner decision): the workspace has no login. /workspace and /m open straight into the app, with no token prompt. Anyone who has the URL can use the AI, read CRM and memory, approve actions and change settings. The obscurity of the URL is the only protection right now. Do not share the link, and do not put anything sensitive in it that you would not show a stranger.
 
-WORKSPACE_TOKEN=<a long random string you choose>
+Run the backend with the existing uvicorn command (see Run above). Open the workspace at /workspace on your server (or your tunnel URL plus /workspace). The status bar shows whether a provider is ready.
 
-Run the backend with the existing uvicorn command (see Run above). Open the workspace at /workspace on your
-server (or your tunnel URL plus /workspace), paste the same token in Settings, and the status bar shows whether
-a provider is ready.
+To re-enable a gate later (not built now): either add a token check back in app/workspace_api.py (a FastAPI dependency on the router that compares the x-workspace-token header to WORKSPACE_TOKEN, failing closed when unset), or put the service behind Render's own protection or a proxy that asks for a login.
 
 Install as a Windows app:
 1. Open the workspace URL in Chrome or Edge.
@@ -131,14 +128,14 @@ Install as a Windows app:
 The install needs the server reachable at that URL. The service worker caches only the static shell, never owner data.
 
 Local development: run the server, edit app/static/workspace.html, workspace.css or workspace.js, and refresh.
-The owner token is kept only for the current browser tab (session storage).
+No token is kept or sent (open access).
 
 
 ## Phone app (PWA at /m)
 
 Open /m on an Android or iPhone browser. It shares the same backend as /workspace: chat, chats list,
 tasks (polls every 3 s while one is running), approvals (approve and reject), memory (search and
-forget), provider status (/readyz) and the owner token. Add it to the home screen from the browser
+forget) and provider status (/readyz). There is no login (open access). Add it to the home screen from the browser
 menu (Android: Install app or Add to Home screen. iPhone: Share, then Add to Home Screen). It opens
 standalone with the Royce icon.
 
@@ -169,9 +166,8 @@ Nothing is deployed. render.yaml describes one Render web service that serves th
 - ALLOWED_ORIGINS: comma-separated origins allowed to call the API cross-origin, for example
   https://royce-ai.onrender.com,https://your-app.vercel.app. No wildcard, no credentials header.
   Default (unset): http://localhost:8000 and http://127.0.0.1:8000 only.
-- Auth: owner token (WORKSPACE_TOKEN). Each client sends it as the x-workspace-token header.
-  The workspace and /m store it only in the browser or device localStorage. No frontend bundle
-  contains a secret.
+- Auth: none. The workspace APIs are open access (WORKSPACE_TOKEN is no longer checked by any route).
+  Anyone with the URL can use the AI and read CRM and memory; URL obscurity is the only protection.
 
 Simplest path: one Render service serves both the PWA and the API, so no CORS is needed.
 Optional: host the static files separately (e.g. Vercel) and set ALLOWED_ORIGINS to that origin.

@@ -36,9 +36,9 @@ def test_mobile_assets_exist_and_are_served(client):
     assert client.get("/static/mobile.css").status_code == 200
 
 
-def test_mobile_js_uses_token_header_and_never_innerhtml():
+def test_mobile_js_is_open_access_and_never_innerhtml():
     src = open(os.path.join(STATIC, "mobile.js"), encoding="utf-8").read()
-    assert "x-workspace-token" in src
+    assert "x-workspace-token" not in src
     assert ".innerHTML" not in src and "insertAdjacentHTML" not in src  # rendering stays textContent-only
     assert "/api/ws" in src
 
@@ -129,17 +129,17 @@ def test_cors_default_allows_localhost(monkeypatch):
     assert r.headers.get("access-control-allow-origin") == "http://localhost:8000"
 
 
-def test_chat_requires_token(client, monkeypatch):
+def test_chat_open_access(client, monkeypatch):
     monkeypatch.setenv("WORKSPACE_TOKEN", "test-owner-token")
     r = client.post("/api/ws/chat", json={"message": "hi"})
-    assert r.status_code == 401
+    assert r.status_code != 401
     r = client.post("/api/ws/chat", json={"message": "hi"}, headers={"x-workspace-token": "wrong"})
-    assert r.status_code == 401
+    assert r.status_code != 401
 
 
-def test_status_endpoint_requires_token(client, monkeypatch):
+def test_status_endpoint_open_access(client, monkeypatch):
     monkeypatch.setenv("WORKSPACE_TOKEN", "test-owner-token")
-    assert client.get("/api/ws/conversations").status_code == 401
+    assert client.get("/api/ws/conversations").status_code == 200
 
 
 def importlib_reload_main():

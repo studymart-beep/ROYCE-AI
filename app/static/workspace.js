@@ -1,13 +1,11 @@
-/* Royce AI workspace. Talks only to /api/ws/* on this server with the owner token header.
+/* Royce AI workspace. Talks only to /api/ws/* on this server. Open access, no token.
    Every piece of model or user text is rendered with textContent only. */
 (function () {
   "use strict";
 
-  const TOKEN_KEY = "royce_ws_token";
   const ACCENT_KEY = "royce_accent";
   const $ = (id) => document.getElementById(id);
   const state = {
-    token: sessionStorage.getItem(TOKEN_KEY) || "",
     page: "sessions",
     convs: [],
     convId: null,
@@ -61,14 +59,11 @@
 
   // ---------- API ----------
   async function api(method, path, body) {
-    const opts = { method, headers: { "x-workspace-token": state.token, "Content-Type": "application/json" } };
+    const opts = { method, headers: { "Content-Type": "application/json" } };
     if (body !== undefined) opts.body = JSON.stringify(body);
     const r = await fetch((window.ROYCE_API_BASE || "") + "/api/ws" + path, opts);
     let data = null;
     try { data = await r.json(); } catch (e) { data = null; }
-    if (r.status === 401 || r.status === 503) {
-      showAuth(r.status === 503 ? "The server has no WORKSPACE_TOKEN set. The workspace stays locked." : "Owner token rejected.");
-    }
     if (!r.ok) {
       const d = data && data.detail !== undefined ? data.detail : data;
       const msg = (d && d.message) || (typeof d === "string" ? d : "") || ("request failed (" + r.status + ")");
@@ -80,13 +75,6 @@
     return data;
   }
 
-  // ---------- auth ----------
-  function showAuth(msg) {
-    $("auth").hidden = false;
-    $("tokenInput").focus();
-    if (msg) toast(msg, true);
-  }
-  function hideAuth() { $("auth").hidden = true; }
 
   // ---------- pages ----------
   const PAGES = {
@@ -943,27 +931,13 @@
     else delete document.body.dataset.accent;
   }
 
-  // ---------- auth form ----------
-  function bindAuth() {
-    $("authForm").addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      const v = $("tokenInput").value.trim();
-      if (!v) return;
-      state.token = v;
-      sessionStorage.setItem(TOKEN_KEY, v);
-      hideAuth();
-      go(state.page);
-    });
-  }
 
   // ---------- boot ----------
   function init() {
     applyAccent();
-    bindAuth();
     document.querySelectorAll(".rail-item").forEach((b) => b.addEventListener("click", () => go(b.dataset.page)));
     window.addEventListener("hashchange", () => go((location.hash || "#sessions").slice(1)));
     const start = (location.hash || "#sessions").slice(1);
-    if (!state.token) { showAuth(""); }
     go(PAGES[start] ? start : "sessions");
     loadProviderStatus();
   }

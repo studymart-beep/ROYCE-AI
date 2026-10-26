@@ -42,11 +42,11 @@ def _fake_provider(monkeypatch, reply="step output text"):
 
 # --- owner gate ---------------------------------------------------------------
 
-def test_workspace_routes_require_owner_token(client, monkeypatch):
+def test_workspace_routes_are_open_access(client, monkeypatch):
     _no_llm(monkeypatch)
-    assert client.get("/api/ws/conversations").status_code == 401
-    assert client.get("/api/ws/conversations", headers={"x-workspace-token": "wrong"}).status_code == 401
-    assert client.post("/api/ws/chat", json={"message": "hi"}).status_code == 401
+    assert client.get("/api/ws/conversations").status_code == 200
+    assert client.get("/api/ws/conversations", headers={"x-workspace-token": "wrong"}).status_code == 200
+    assert client.post("/api/ws/chat", json={"message": "hi"}).status_code == 200
     assert client.get("/api/ws/conversations", headers=OWNER).status_code == 200
 
 
@@ -54,9 +54,9 @@ def test_bearer_token_also_accepted(client):
     assert client.get("/api/ws/conversations", headers={"Authorization": f"Bearer {TOKEN}"}).status_code == 200
 
 
-def test_unset_token_fails_closed(client, monkeypatch):
+def test_unset_token_still_open_access(client, monkeypatch):
     monkeypatch.delenv("WORKSPACE_TOKEN", raising=False)
-    assert client.get("/api/ws/conversations", headers=OWNER).status_code == 503
+    assert client.get("/api/ws/conversations").status_code == 200
 
 
 # --- chat -----------------------------------------------------------------------
@@ -173,10 +173,9 @@ def test_reject_marks_rejected(client):
     assert client.post(f"/api/ws/approvals/{rid}/approve", headers=OWNER).status_code == 409
 
 
-def test_approval_endpoints_require_token(client):
+def test_approval_endpoints_open_access(client):
     rid = _pending_approval()
-    assert client.post(f"/api/ws/approvals/{rid}/approve").status_code == 401
-    assert client.post(f"/api/ws/approvals/{rid}/reject").status_code == 401
+    assert client.post(f"/api/ws/approvals/{rid}/reject").status_code == 200
 
 
 def test_approval_not_found(client):
@@ -196,9 +195,9 @@ def test_memory_save_list_delete(client):
     assert client.delete("/api/ws/memory/brand_color", headers=OWNER).status_code == 404
 
 
-def test_memory_delete_requires_token(client):
+def test_memory_delete_open_access(client):
     memory.save("k1", "x", scope="project")
-    assert client.delete("/api/ws/memory/k1").status_code == 401
+    assert client.delete("/api/ws/memory/k1").status_code == 200
 
 
 # --- status ----------------------------------------------------------------------

@@ -1,15 +1,13 @@
 """Workspace API: web chat, conversations, planner tasks, approvals, memory, provider status.
 
-Every route here is mounted under /api/ws and gated by the owner token (WORKSPACE_TOKEN in .env).
-The API is reachable through the public tunnel, so a missing or wrong token gets 401, and an unset
-WORKSPACE_TOKEN makes every route return 503 (fail closed, never open).
+Every route here is mounted under /api/ws. OPEN ACCESS: there is no token gate. Anyone who can reach
+the URL can use the AI and read CRM and memory. See README and DEPLOY-WEB.md for re-enabling options.
 
 Reuses the same modules the Telegram bot uses: chat_text, chatplan, approvals, memory, permissions,
 budget and audit. The web chat binds one shared budget bucket ("web"), so the hourly cap is shared
 by all web conversations and cannot be multiplied by creating new chats.
 """
-import hmac, os
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from . import conversations
@@ -18,18 +16,6 @@ from .agent import approvals, audit, budget, chatplan, memory
 router = APIRouter(prefix="/api/ws")
 WEB_BUCKET = "web"
 MAX_MESSAGE = 4000
-
-
-def require_owner(authorization: str = Header(default=""), x_workspace_token: str = Header(default="")):
-    expected = os.environ.get("WORKSPACE_TOKEN", "").strip()
-    if not expected:
-        raise HTTPException(503, "workspace is locked: WORKSPACE_TOKEN is not set on the server")
-    supplied = x_workspace_token.strip()
-    if not supplied and authorization.lower().startswith("bearer "):
-        supplied = authorization[7:].strip()
-    if not supplied or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(401, "owner token required")
-    return True
 
 
 class ChatIn(BaseModel):
@@ -67,7 +53,7 @@ def _sanitize(t):
     return sanitize(t)
 
 
-@router.post("/chat", dependencies=[Depends(require_owner)])
+@router.post("/chat")
 def chat(body: ChatIn):
     """Send one message. Multi-step asks run through the planner; everything else is a direct reply.
 
@@ -142,12 +128,12 @@ def _bot_chat(body, text, history, bot):
             "bot": {"id": bot["id"], "name": bot["name"]}, "delegations": delegations}
 
 
-@router.get("/conversations", dependencies=[Depends(require_owner)])
+@router.get("/conversations")
 def list_conversations(q: str | None = Query(default=None, max_length=200)):
     return conversations.list_all(q)
 
 
-@router.get("/conversations/{cid}", dependencies=[Depends(require_owner)])
+@router.get("/conversations/{cid}")
 def get_conversation(cid: str):
     conv = conversations.get(cid)
     if not conv:
@@ -155,12 +141,12 @@ def get_conversation(cid: str):
     return conv
 
 
-@router.get("/tasks", dependencies=[Depends(require_owner)])
+@router.get("/tasks")
 def list_tasks():
     return [_task_view(rec) for rec in chatplan.all_plans() if rec.get("chat_id") == WEB_BUCKET]
 
 
-@router.get("/tasks/{task_id}", dependencies=[Depends(require_owner)])
+@router.get("/tasks/{task_id}")
 def get_task(task_id: str):
     rec = chatplan.get(task_id)
     if not rec or rec.get("chat_id") != WEB_BUCKET:
@@ -183,7 +169,7 @@ def _task_view(rec):
             "summary": chatplan.summary(rec) if rec.get("steps") else ""}
 
 
-@router.get("/approvals", dependencies=[Depends(require_owner)])
+@router.get("/approvals")
 def list_approvals():
     out = []
     for r in approvals.all_records():
@@ -193,7 +179,7 @@ def list_approvals():
     return out
 
 
-@router.post("/approvals/{rid}/approve", dependencies=[Depends(require_owner)])
+@router.post("/approvals/{rid}/approve")
 def approve(rid: str):
     """Approve a pending action. Checks the record exists and is pending; the approvals store and the
     planner enforce the rest (chat ownership, single execution)."""
@@ -212,7 +198,7 @@ def approve(rid: str):
     return {"ok": ok, "message": msg}
 
 
-@router.post("/approvals/{rid}/reject", dependencies=[Depends(require_owner)])
+@router.post("/approvals/{rid}/reject")
 def reject(rid: str):
     rec = approvals.get(rid)
     if not rec:
@@ -229,7 +215,7 @@ def reject(rid: str):
     return {"ok": bool(ok)}
 
 
-@router.get("/memory", dependencies=[Depends(require_owner)])
+@router.get("/memory")
 def list_memory(q: str | None = Query(default=None, max_length=200)):
     items = memory.all_items()
     needle = (q or "").strip().lower()
@@ -239,7 +225,7 @@ def list_memory(q: str | None = Query(default=None, max_length=200)):
             for m in items]
 
 
-@router.delete("/memory/{key}", dependencies=[Depends(require_owner)])
+@router.delete("/memory/{key}")
 def forget_memory(key: str):
     if not memory.forget(key):
         raise HTTPException(404, "no such memory entry")
@@ -247,7 +233,7 @@ def forget_memory(key: str):
     return {"ok": True}
 
 
-@router.get("/status", dependencies=[Depends(require_owner)])
+@router.get("/status")
 def status():
     from .config import provider_status
     from .agent import validate, jobs
@@ -279,20 +265,20 @@ class BotIn(BaseModel):
     template: str | None = Field(default=None, max_length=60)
 
 
-@router.get("/bots/templates", dependencies=[Depends(require_owner)])
+@router.get("/bots/templates")
 def bot_templates():
     from . import bots
     return {"templates": bots.templates(), "categories": bots.CATEGORIES}
 
 
-@router.get("/bots", dependencies=[Depends(require_owner)])
+@router.get("/bots")
 def list_bots():
     from . import bots
     bots.ensure_coordinator()  # seeds the Chief of Staff once, idempotent
     return {"bots": bots.list_bots()}
 
 
-@router.get("/bots/chief", dependencies=[Depends(require_owner)])
+@router.get("/bots/chief")
 def chief_bot():
     """The Chief of Staff. Created on first call if missing, never duplicated."""
     from . import bots
@@ -300,7 +286,7 @@ def chief_bot():
     return bot
 
 
-@router.post("/bots", dependencies=[Depends(require_owner)])
+@router.post("/bots")
 def create_bot(body: BotIn):
     from . import bots
     try:
@@ -311,7 +297,7 @@ def create_bot(body: BotIn):
     return bot
 
 
-@router.delete("/bots/{bot_id}", dependencies=[Depends(require_owner)])
+@router.delete("/bots/{bot_id}")
 def delete_bot(bot_id: str):
     from . import bots
     try:
@@ -329,13 +315,13 @@ class RoutineIn(BaseModel):
     note: str = Field(default="", max_length=500)
 
 
-@router.get("/routines", dependencies=[Depends(require_owner)])
+@router.get("/routines")
 def list_routines():
     from . import routines
     return {"system": routines.system_jobs(), "user": routines.list_user()}
 
 
-@router.post("/routines", dependencies=[Depends(require_owner)])
+@router.post("/routines")
 def create_routine(body: RoutineIn):
     from . import routines
     try:
@@ -346,7 +332,7 @@ def create_routine(body: RoutineIn):
     return rec
 
 
-@router.delete("/routines/{rid}", dependencies=[Depends(require_owner)])
+@router.delete("/routines/{rid}")
 def delete_routine(rid: str):
     from . import routines
     if not routines.delete(rid):
@@ -361,13 +347,13 @@ class ToolToggleIn(BaseModel):
     enabled: bool
 
 
-@router.get("/tools", dependencies=[Depends(require_owner)])
+@router.get("/tools")
 def list_tools():
     from .agent import tools
     return {"tools": tools.describe()}
 
 
-@router.put("/tools/{name}", dependencies=[Depends(require_owner)])
+@router.put("/tools/{name}")
 def toggle_tool(name: str, body: ToolToggleIn):
     from .agent import tools
     try:
@@ -378,7 +364,7 @@ def toggle_tool(name: str, body: ToolToggleIn):
     return {"name": name, "enabled": on}
 
 
-@router.get("/skills", dependencies=[Depends(require_owner)])
+@router.get("/skills")
 def list_skills_route():
     from . import skills
     return {"skills": skills.list_skills()}
@@ -389,7 +375,7 @@ class SkillIn(BaseModel):
     description: str = Field(default="", max_length=300)
 
 
-@router.get("/skills/{name}", dependencies=[Depends(require_owner)])
+@router.get("/skills/{name}")
 def get_skill_route(name: str):
     from . import skills
     body = skills.get_skill(name)
@@ -399,7 +385,7 @@ def get_skill_route(name: str):
     return {"name": name, "description": meta.get("description", ""), "body": body}
 
 
-@router.put("/skills/{name}", dependencies=[Depends(require_owner)])
+@router.put("/skills/{name}")
 def save_skill_route(name: str, body: SkillIn):
     from . import skills
     try:
@@ -410,7 +396,7 @@ def save_skill_route(name: str, body: SkillIn):
     return {"name": saved}
 
 
-@router.get("/messaging", dependencies=[Depends(require_owner)])
+@router.get("/messaging")
 def list_messaging():
     from . import tgstore, tgprecautions
     chats = []
@@ -425,7 +411,7 @@ class MessagingToggleIn(BaseModel):
     precautions_on: bool
 
 
-@router.put("/messaging/{group_id}", dependencies=[Depends(require_owner)])
+@router.put("/messaging/{group_id}")
 def toggle_messaging(group_id: str, body: MessagingToggleIn):
     from . import tgstore, tgprecautions
     known = {str(g) for g, _t, _c in tgstore.known_chats()}
@@ -436,7 +422,7 @@ def toggle_messaging(group_id: str, body: MessagingToggleIn):
     return {"group_id": group_id, "precautions_on": on}
 
 
-@router.get("/connectors", dependencies=[Depends(require_owner)])
+@router.get("/connectors")
 def list_connectors():
     from . import collectors
     out = []
@@ -446,13 +432,13 @@ def list_connectors():
     return {"connectors": out}
 
 
-@router.get("/work", dependencies=[Depends(require_owner)])
+@router.get("/work")
 def list_work_route():
     from . import workstore
     return {"items": workstore.list_work()}
 
 
-@router.get("/usage", dependencies=[Depends(require_owner)])
+@router.get("/usage")
 def usage():
     return {"bucket": WEB_BUCKET, "used_this_hour": budget.used(WEB_BUCKET),
             "remaining_this_hour": budget.remaining(WEB_BUCKET)}
@@ -462,7 +448,7 @@ class DefaultProviderIn(BaseModel):
     provider: str = Field(min_length=1, max_length=20)
 
 
-@router.put("/settings/default-provider", dependencies=[Depends(require_owner)])
+@router.put("/settings/default-provider")
 def set_default_provider(body: DefaultProviderIn):
     from .config import PROVIDERS, load_settings, save_settings
     if body.provider not in PROVIDERS:

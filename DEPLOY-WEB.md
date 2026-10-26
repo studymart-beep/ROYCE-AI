@@ -9,10 +9,14 @@ The existing Render service (`royce-ai`, see `render.yaml`) already serves every
 
 - https://royce-ai.onrender.com/workspace (desktop workspace)
 - https://royce-ai.onrender.com/m (mobile PWA, bottom tabs)
-- https://royce-ai.onrender.com/api/ws/* (the API, guarded by the owner token)
+- https://royce-ai.onrender.com/api/ws/* (the API, open access: no token)
 
-Same origin means no CORS setup. The owner token is typed in at runtime and kept only in that
-browser (`sessionStorage` on desktop, `localStorage` on mobile). It is never in the code.
+Same origin means no CORS setup. There is no login and no token: the app loads straight in.
+
+**OPEN ACCESS WARNING (owner decision):** anyone who has the URL can use the AI and read CRM and memory.
+The obscurity of the URL is the only protection. Re-enable options for later: a token check on the router
+in `app/workspace_api.py` (fail closed when WORKSPACE_TOKEN is unset), or Render's own protection or a
+login proxy in front of the service.
 
 Only if you also serve the frontend from another origin (option B) must you add that origin:
 set `ALLOWED_ORIGINS` on Render to a comma-separated list, no trailing slash, no `*`, for example
@@ -38,7 +42,7 @@ Steps (owner's Vercel account, done by the owner):
 4. On Render, open the `royce-ai` service, Environment, and set `ALLOWED_ORIGINS` to that exact
    origin, for example `https://royce-ai-web.vercel.app`. Add more origins comma-separated if
    needed, with no trailing slash. Save, and Render restarts the service.
-5. Open `https://<vercel-url>/workspace` (or `/m`), enter the owner token when asked, and check
+5. Open `https://<vercel-url>/workspace` (or `/m`). There is no token prompt now, and check
    that the Sessions page loads. A CORS failure shows as a blocked request in the browser console,
    which means the origin in `ALLOWED_ORIGINS` does not match exactly.
 
@@ -52,11 +56,11 @@ Limits of option B (honest):
   files, but offline caching on the Vercel origin is untested. The app works online either way.
 - Vercel was not deployed or tested by this repo. The steps are written from the config files
   and are unverified until the owner runs them.
-- The owner token travels to the Render API in a header from the Vercel origin. Keep it private.
+- No token is sent. The API is open access, so anyone with the Vercel or Render URL can use it (see the warning above).
 
 ## Security checks (this repo)
 
-- No tokens or keys are hard-coded in `app/static/`. The owner token is entered at runtime only.
+- No tokens or keys are in `app/static/`. The workspace has no token prompt (open access). Protection is URL obscurity only.
 - CORS uses an explicit origin list (`allowed_origins()` in `app/main.py`). `*` is dropped and
   `allow_credentials` is `False`, so the wildcard-plus-credentials combination cannot happen.
 - Tests: `tests/unit/test_api_base.py` covers the config route, the default same-origin behavior,

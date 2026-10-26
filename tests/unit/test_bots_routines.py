@@ -63,8 +63,8 @@ def test_routine_crud_and_system_jobs_are_read_only_and_flagged(client):
     assert client.get("/api/ws/routines").json()["user"] == []
 
 
-def test_bots_endpoints_require_owner(client):
+def test_bots_endpoints_open_access(client):
     from fastapi.testclient import TestClient as TC
     anon = TC(client.app)
-    assert anon.get("/api/ws/bots").status_code == 401
-    assert anon.get("/api/ws/routines").status_code == 401
+    assert anon.get("/api/ws/bots").status_code == 200
+    assert anon.get("/api/ws/routines").status_code == 200

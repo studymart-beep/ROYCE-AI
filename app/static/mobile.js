@@ -1,11 +1,9 @@
-/* Royce AI mobile client. Same backend as /workspace: /api/ws/* with the x-workspace-token header.
-   Rendering uses textContent only (never innerHTML). The owner token lives in localStorage on this phone
-   and is sent only as a request header. Nothing here fakes an AI reply: offline or failed calls say so. */
+/* Royce AI mobile client. Same backend as /workspace: /api/ws/*. Open access, no token.
+   Rendering uses textContent only (never innerHTML). Nothing here fakes an AI reply: offline or failed calls say so. */
 (function () {
   "use strict";
-  var TOKEN_KEY = "royce.m.token";
   var API = (window.ROYCE_API_BASE || "") + "/api/ws";
-  var state = { tab: "chats", convId: null, token: localStorage.getItem(TOKEN_KEY) || "", pollTimer: null, busy: false };
+  var state = { tab: "chats", convId: null, pollTimer: null, busy: false };
   var $ = function (id) { return document.getElementById(id); };
 
   function toast(msg, isErr) {
@@ -23,7 +21,7 @@
 
   async function api(method, path, body) {
     if (offline()) throw new ApiError(0, "you're offline. AI needs a connection.");
-    var headers = { "x-workspace-token": state.token };
+    var headers = {};
     var opts = { method: method, headers: headers, cache: "no-store" };
     if (body !== undefined) {
       headers["content-type"] = "application/json";
@@ -40,7 +38,6 @@
     if (!r.ok) {
       var detail = data && (data.detail || data.message || data.error);
       if (detail && typeof detail === "object") detail = detail.message || detail.error;
-      if (r.status === 401) detail = "owner token rejected. check it under more.";
       if (r.status === 503 && data && data.error === "offline") detail = data.message;
       throw new ApiError(r.status, detail || ("request failed (" + r.status + ")"));
     }
@@ -86,16 +83,12 @@
     if (name === "tasks") loadTasks();
     if (name === "approvals") loadApprovals();
     if (name === "more") { loadStatus(); loadMemory(); }
-    if (!state.token && name !== "more") {
-      toast("add your owner token under more first", true);
-    }
   }
 
   /* ---------- chats ---------- */
   async function loadConversations() {
     var list = $("convList");
     list.textContent = "";
-    if (!state.token) { $("convEmpty").hidden = false; $("convEmpty").textContent = "add your owner token under more to load chats."; return; }
     try {
       var q = $("convSearch").value.trim();
       var items = await api("GET", "/conversations" + (q ? "?q=" + encodeURIComponent(q) : ""));
@@ -136,7 +129,6 @@
 
   function showError(e) {
     if (e.status === 0 || offline()) setConn("bad", "offline");
-    else if (e.status === 401 || e.status === 503) setConn("bad", "needs token");
     else setConn("bad", "error");
     toast(e.message || "something went wrong", true);
   }
@@ -147,7 +139,6 @@
     var input = $("input");
     var text = input.value.trim();
     if (!text) return;
-    if (!state.token) { toast("add your owner token under more first", true); return; }
     state.busy = true;
     $("send").disabled = true;
     input.value = "";
@@ -191,7 +182,6 @@
   async function loadTasks() {
     var list = $("taskList");
     list.textContent = "";
-    if (!state.token) { $("taskEmpty").hidden = false; return; }
     try {
       var tasks = await api("GET", "/tasks");
       $("taskEmpty").hidden = tasks.length > 0;
@@ -215,7 +205,6 @@
   async function loadApprovals() {
     var list = $("apprList");
     list.textContent = "";
-    if (!state.token) { $("apprEmpty").hidden = false; return; }
     try {
       var items = await api("GET", "/approvals");
       var pending = items.filter(function (a) { return a.status === "pending"; });
@@ -256,7 +245,7 @@
     }
   }
 
-  /* ---------- more: provider, memory, token ---------- */
+  /* ---------- more: provider, memory ---------- */
   async function loadStatus() {
     var card = $("providerCard");
     card.textContent = "";
@@ -273,7 +262,7 @@
       } else {
         card.appendChild(el("p", "muted", "provider status unavailable right now."));
       }
-      if (state.token) {
+      {
         var st = await api("GET", "/status");
         var b = st.budget || {};
         var row2 = el("div", "kv");
@@ -289,7 +278,6 @@
   async function loadMemory() {
     var list = $("memList");
     list.textContent = "";
-    if (!state.token) { $("memEmpty").hidden = false; return; }
     try {
       var q = $("memSearch").value.trim();
       var items = await api("GET", "/memory" + (q ? "?q=" + encodeURIComponent(q) : ""));
@@ -317,23 +305,6 @@
   }
 
   /* ---------- wiring ---------- */
-  function saveToken() {
-    var v = $("tokenInput").value.trim();
-    if (!v) { toast("enter the owner token", true); return; }
-    state.token = v;
-    localStorage.setItem(TOKEN_KEY, v);
-    $("tokenInput").value = "";
-    toast("token saved on this phone");
-    loadStatus();
-  }
-
-  function forgetToken() {
-    state.token = "";
-    localStorage.removeItem(TOKEN_KEY);
-    toast("token forgotten on this phone");
-    loadStatus();
-  }
-
   function updateOnline() {
     $("offlineBanner").hidden = !offline();
     if (offline()) setConn("bad", "offline");
@@ -366,8 +337,6 @@
     var searchT;
     $("convSearch").addEventListener("input", function () { clearTimeout(searchT); searchT = setTimeout(loadConversations, 300); });
     $("memSearch").addEventListener("input", function () { clearTimeout(searchT); searchT = setTimeout(loadMemory, 300); });
-    $("saveToken").addEventListener("click", saveToken);
-    $("forgetToken").addEventListener("click", forgetToken);
     window.addEventListener("online", function () { updateOnline(); showTab(state.tab); });
     window.addEventListener("offline", updateOnline);
     trackKeyboard();
