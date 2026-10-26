@@ -467,8 +467,11 @@
     const approval = el("span", "chip off", "no approvals waiting");
     approval.id = "approvalChip";
     left.appendChild(approval);
-    const attach = el("span", "small muted", "plain-text chat \u00b7 attachments live in the workspace folder");
-    left.appendChild(attach);
+    const att = window.RoyceAttach.create({ getConvId: () => state.convId, toast: (m, bad) => toast(m, bad), onChange: () => {} });
+    box.attachCtl = att;
+    left.appendChild(att.button);
+    left.appendChild(att.input);
+    box.insertBefore(att.strip, ta);
     tools.appendChild(left);
     const right = el("div", "row");
     const pill = el("span", "model-pill", "Model\u00a0");
@@ -493,8 +496,9 @@
     box.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const text = ta.value.trim();
-      if (!text) return;
-      await sendMessage(text, ta, send);
+      if (!text && att.count() === 0) return;
+      if (att.uploading()) { toast("wait for the upload to finish", true); return; }
+      await sendMessage(text, ta, send, att.take());
     });
     return box;
   }
@@ -549,9 +553,12 @@
     row.appendChild(col);
     return row;
   }
-  function userBubble(text) {
+  function userBubble(text, attachments) {
     const row = el("div", "msg-row user-row");
-    row.appendChild(el("div", "bubble user", text));
+    const col = el("div", "msg-col user-col");
+    if (attachments && attachments.length) col.appendChild(window.RoyceAttach.nodes(attachments));
+    if (text) col.appendChild(el("div", "bubble user", text));
+    row.appendChild(col);
     return row;
   }
   function selectBot(id) {
@@ -584,9 +591,13 @@
     ta.placeholder = cfg.work ? "Give " + cfg.botName + " a complex task\u2026  (Enter sends, Shift+Enter for a new line)" : "Message " + cfg.botName + "\u2026  (Enter sends, Shift+Enter for a new line)";
     ta.setAttribute("aria-label", "Message " + cfg.botName);
     ta.rows = 2;
+    const att = window.RoyceAttach.create({ getConvId: () => convId, toast: (m, bad) => toast(m, bad), onChange: () => {} });
+    compose.appendChild(att.strip);
     compose.appendChild(ta);
     const ctools = el("div", "composer-tools");
     const approvalChipEl = el("span", "chip off", "no approvals waiting");
+    ctools.appendChild(att.button);
+    ctools.appendChild(att.input);
     ctools.appendChild(approvalChipEl);
     const send = el("button", "send-fab", "\u2191");
     send.type = "submit";
@@ -615,16 +626,16 @@
         renderHistory(scroll, c.messages || []);
       } catch (e) { scroll.appendChild(notice("couldn't open that chat: " + e.message)); }
     }
-    async function run(text) {
+    async function run(text, attachments) {
       clear(errSlot);
-      scroll.appendChild(userBubble(text));
+      scroll.appendChild(userBubble(text, attachments));
       ta.value = "";
       send.disabled = true;
       const thinking = thinkingRow(cfg.work ? "working on it..." : "thinking...");
       scroll.appendChild(thinking);
       scroll.scrollTop = scroll.scrollHeight;
       try {
-        const res = await api("POST", "/chat", { message: text, conversation_id: convId, bot_id: cfg.botId });
+        const res = await api("POST", "/chat", { message: text, conversation_id: convId, bot_id: cfg.botId, attachments: (attachments || []).map((a) => a.url) });
         thinking.remove();
         convId = res.conversation_id; persist(convId);
         if (cfg.work) renderWorkResult(scroll, res);
@@ -636,7 +647,7 @@
         scroll.appendChild(el("div", "bubble error", "The reply didn't go through: " + e.message));
         const bar = el("div", "err-box");
         bar.appendChild(el("span", "", "Nothing was stored, so retrying is safe."));
-        bar.appendChild(btn("Retry", "", () => { bar.remove(); run(text); }, "retry message"));
+        bar.appendChild(btn("Retry", "", () => { bar.remove(); run(text, attachments); }, "retry message"));
         errSlot.appendChild(bar);
       } finally {
         send.disabled = false;
@@ -645,14 +656,16 @@
     compose.addEventListener("submit", (ev) => {
       ev.preventDefault();
       const text = ta.value.trim();
-      if (text) run(text);
+      if (!text && att.count() === 0) return;
+      if (att.uploading()) { toast("wait for the upload to finish", true); return; }
+      run(text, att.take());
     });
     load();
   }
   function renderHistory(scroll, msgs) {
     if (!msgs.length) { scroll.appendChild(empty("no messages yet.")); return; }
     msgs.forEach((m) => {
-      if (m.role === "user") scroll.appendChild(userBubble(m.text || m.content || ""));
+      if (m.role === "user") scroll.appendChild(userBubble(m.text || m.content || "", m.attachments || []));
       else scroll.appendChild(assistantBubble(m.text || m.content || "", m.meta && m.meta.bot_name ? { name: m.meta.bot_name } : null));
     });
   }
@@ -704,10 +717,10 @@
     if (!names.length) return null;
     return el("div", "delegated muted small", "delegated to " + names.join(", "));
   }
-  async function sendMessage(text, ta, send) {
+  async function sendMessage(text, ta, send, attachments) {
     const scroll = $("chatScroll");
     const errSlot = clear($("chatErr"));
-    scroll.appendChild(el("div", "bubble user", text));
+    scroll.appendChild(userBubble(text, attachments));
     scroll.scrollTop = scroll.scrollHeight;
     ta.value = "";
     send.disabled = true;
@@ -715,7 +728,7 @@
       const thinking = thinkingRow(state.selectedBot ? "thinking..." : "thinking...");
       scroll.appendChild(thinking);
       scroll.scrollTop = scroll.scrollHeight;
-      const res = await api("POST", "/chat", { message: text, conversation_id: state.convId, bot_id: state.selectedBot || null });
+      const res = await api("POST", "/chat", { message: text, conversation_id: state.convId, bot_id: state.selectedBot || null, attachments: (attachments || []).map((a) => a.url) });
       thinking.remove();
       state.convId = res.conversation_id;
       const dl = delegationLine(res.delegations);

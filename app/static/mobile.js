@@ -114,12 +114,19 @@
     if (!cid) return;
     try {
       var conv = await api("GET", "/conversations/" + encodeURIComponent(cid));
-      (conv.messages || []).forEach(function (m) { addBubble(m.role === "user" ? "user" : "assistant", m.text, m.ts); });
+      (conv.messages || []).forEach(function (m) { addBubble(m.role === "user" ? "user" : "assistant", m.text, m.ts, m.role === "user" ? (m.attachments || []) : []); });
       scrollChat();
     } catch (e) { showError(e); }
   }
 
-  function addBubble(kind, text, ts) {
+  function addBubble(kind, text, ts, attachments) {
+    if (attachments && attachments.length) {
+      var holder = el("div", "bubble-group " + kind);
+      holder.appendChild(window.RoyceAttach.nodes(attachments));
+      if (text) holder.appendChild(el("div", "bubble " + kind, text));
+      $("msgs").appendChild(holder);
+      return holder;
+    }
     var wrap = el("div", "bubble " + kind, text);
     $("msgs").appendChild(wrap);
     return wrap;
@@ -138,16 +145,18 @@
     if (state.busy) return;
     var input = $("input");
     var text = input.value.trim();
-    if (!text) return;
+    if (!text && !(state.att && state.att.count())) return;
+    if (state.att && state.att.uploading()) { toast("wait for the upload to finish", true); return; }
+    var attachments = state.att ? state.att.take() : [];
     state.busy = true;
     $("send").disabled = true;
     input.value = "";
     autoSize();
-    addBubble("user", text);
+    addBubble("user", text, null, attachments);
     var pending = addBubble("assistant pending", "royce is thinking");
     scrollChat();
     try {
-      var res = await api("POST", "/chat", { message: text, conversation_id: state.convId });
+      var res = await api("POST", "/chat", { message: text, conversation_id: state.convId, attachments: attachments.map(function (a) { return a.url; }) });
       state.convId = res.conversation_id;
       pending.remove();
       addBubble("assistant", res.reply || "");
@@ -326,6 +335,12 @@
     document.querySelectorAll(".tab").forEach(function (b) {
       b.addEventListener("click", function () { showTab(b.getAttribute("data-tab")); });
     });
+    state.att = window.RoyceAttach.create({ getConvId: function () { return state.convId; }, toast: function (m, bad) { toast(m, bad); }, onChange: function () { } });
+    var composerForm = $("composer");
+    var attBtn = state.att.button;
+    composerForm.insertBefore(attBtn, $("input"));
+    composerForm.appendChild(state.att.input);
+    composerForm.parentNode.insertBefore(state.att.strip, composerForm);
     $("composer").addEventListener("submit", sendMessage);
     $("input").addEventListener("input", autoSize);
     $("input").addEventListener("keydown", function (ev) {

@@ -2,7 +2,7 @@
    - Static app shell: cache-first from a versioned cache. Bump CACHE when shell files change.
    - /api/*: network-only. Never cached, never faked. Offline calls get a clear JSON 503 that the page shows.
    - Navigations that fail offline get the offline page, which says the AI needs a connection. */
-const CACHE = "royce-shell-v4";
+const CACHE = "royce-shell-v5";
 const SHELL = [
   "/m",
   "/workspace",
@@ -12,6 +12,7 @@ const SHELL = [
   "/static/api-base.js",
   "/static/workspace.css",
   "/static/workspace.js",
+  "/static/attach.js",
   "/static/icon.svg",
   "/static/icon-192.png",
   "/static/icon-512.png",

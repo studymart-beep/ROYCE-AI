@@ -82,3 +82,21 @@ main.no-composer{bottom:calc(var(--tab-h) + var(--sa-b))}
   .composer-wrap{transform:translate(-50%,calc(var(--kb,0px) * -1))}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* chat attachments: + button, thumbnail strip above the composer, inline images and file cards */
+.attach-btn{flex:0 0 auto;width:44px;min-height:48px;border:1px solid var(--hair-2);border-radius:14px;background:#101014;color:var(--text);font-size:24px;line-height:1}
+.attach-strip{display:flex;gap:8px;overflow-x:auto;padding:8px 12px 0;max-width:100%}
+.attach-strip[hidden]{display:none}
+.attach-thumb{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:6px;max-width:150px;padding:4px 26px 4px 4px;border:1px solid var(--hair-2);border-radius:12px;background:#101014}
+.attach-thumb img{width:44px;height:44px;object-fit:cover;border-radius:8px}
+.attach-thumb .att-ext{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#1d1d24;font-size:11px;font-weight:700;color:var(--text-2)}
+.attach-thumb .att-tname{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px}
+.att-x{position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;border-radius:50%;background:#2a2a33;color:var(--text);font-size:15px;line-height:1}
+.attachments{display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin:4px 0}
+.att-img{display:block;max-width:220px;max-height:260px;border-radius:14px;border:1px solid var(--hair-2)}
+.att-file{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--hair-2);border-radius:14px;background:#101014;color:var(--text);text-decoration:none;max-width:260px}
+.att-file .att-ext{flex:0 0 auto;padding:6px 8px;border-radius:8px;background:#1d1d24;font-size:11px;font-weight:700;color:var(--text-2)}
+.att-meta{display:flex;flex-direction:column;min-width:0}
+.att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.att-size{font-size:12px;color:var(--muted)}
+.bubble-group{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
