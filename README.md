@@ -43,3 +43,14 @@ Telegram: ask for a report or campaign performance, and the bot pulls the rows f
 ## Mini app (v5, view-first)
 
 The mini app is read-only: Generated work (every ad package, newest first, stored in work.json), CRM leads, the campaign report, and connectors. You do the work by telling Royce in the chat. Each generated package is recorded in work.json via GET /api/work.
+
+## Task memory (never forget)
+
+Work you give Royce in chat ("make...", "find...", "pull...") is written to a task list stored in `tasks.json` at the project root (git-ignored). Each task has an id, chat id, description, status (open, done, unavailable), created_at, and a note.
+
+- Royce confirms the task, does it, and marks it done.
+- If something is not available (for example an ad platform is not connected yet), the task is kept as unavailable. The bot re-checks unavailable tasks every 10 minutes. When the requirement is met, it messages you "the thing u asked for earlier is now available" with the original request, then does the work.
+- Failed work is also kept and retried for about 24 hours.
+- /tasks lists your tasks with status.
+
+The task store lives in `app/tasks.py`, and the bot loop in `app/telegram_bot.py` runs the retry check.

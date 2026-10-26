@@ -6,3 +6,5 @@ __pycache__/
 bot_state*
 collectors.json
 work.json
+tasks.json
+tasks.json.tmp

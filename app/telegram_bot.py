@@ -1,6 +1,6 @@
 import json, os, re, time, urllib.request, urllib.parse
 from .llm import chat_text, generate_script_package
-from . import db, collectors, workstore
+from . import db, collectors, workstore, tasks
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -51,12 +51,150 @@ def handle_script(chat_id, arg):
     caps = "\n\n".join(pkg.get("captions", []))
     send(chat_id, f"🎯 HOOKS\n{hooks}\n\n🎬 SCRIPT\n{script}\n\n✍️ CAPTIONS\n{caps}")
 
+
+# ---------- task memory: work the user gives Royce is tracked until it is done ----------
+RETRY_EVERY = 600          # re-test unavailable tasks at most every 10 minutes
+MAX_RETRY_ATTEMPTS = 144   # 10-minute checks for about 24 hours, then the task stays listed
+
+TASK_SYSTEM = (
+    "Classify one chat message sent to Royce AI, an ad agency assistant. "
+    "is_task is true only when the user asks Royce to DO a piece of work (make, find, pull, write, draft, check, prepare), "
+    "not when they chat, greet, or ask a quick factual question. "
+    "Reply with STRICT JSON only, no prose: "
+    "{\"is_task\": true or false, \"summary\": \"the work in under 12 words\", \"needs\": null or the connected account the work requires}. "
+    "needs is one of: meta, tiktok, google, or null."
+)
+
+def classify(text):
+    try:
+        raw = chat_text([{"role": "system", "content": TASK_SYSTEM}, {"role": "user", "content": text}], temperature=0, timeout=20)
+        m = re.search(r"\{.*\}", raw, re.S)
+        d = json.loads(m.group(0)) if m else {}
+        if not isinstance(d, dict):
+            return {"is_task": False}
+        if d.get("needs") not in (None, "") and d.get("needs") not in collectors.COLLECTORS:
+            d["needs"] = None
+        return d
+    except Exception as e:
+        print(f"[bot] classify failed: {e}", flush=True)
+        return {"is_task": False}
+
+def _needs_connected(name):
+    if not name or name not in collectors.COLLECTORS:
+        return True
+    return collectors.get(name).configured
+
+def _check_passes(check):
+    t = check.get("type")
+    if t == "collector":
+        return _needs_connected(check.get("name"))
+    if t == "any_collector":
+        return bool(collectors.configured_names())
+    return False
+
+def do_chat(text, hist=None):
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+    msgs = [{"role": "system", "content": sysmsg}] + (hist[-HIST_MAX:] if hist else []) + [{"role": "user", "content": text}]
+    return chat_text(msgs, timeout=40)
+
+def run_task(task, announce=None, hist=None):
+    """Do the work a stored task describes. announce() runs once the work succeeded, just before the result goes out."""
+    check = task.get("check") or {}
+    action = check.get("action", "chat")
+    chat_id, desc = task["chat_id"], task["description"]
+    if action == "report":
+        if announce: announce()
+        handle_report(chat_id, desc)
+        return "[sent campaign report]"
+    reply = do_chat(desc, hist)
+    if announce: announce()
+    send(chat_id, reply)
+    return reply
+
+def run_new_task(chat_id, text, action, needs=None, summary="", hist=None):
+    """Record a task, confirm it and do it. Work that cannot run is kept as unavailable and retried."""
+    check = {"type": "retry", "action": action, "attempts": 0}
+    if needs and not _needs_connected(needs):
+        label = collectors.COLLECTORS[needs].label
+        tasks.add_task(chat_id, text, status="unavailable", check={"type": "collector", "name": needs, "action": action},
+                       note=f"{needs} not connected. {summary}".strip())
+        reply = f"can't do that yet, {label} isn't connected. i saved it on my list and i'll ping u the moment it is ✅"
+        send(chat_id, reply)
+        return reply
+    t = tasks.add_task(chat_id, text, status="open", check=check, note=summary)
+    send(chat_id, "on it, added to my list. ill ping u when its done")
+    try:
+        reply = run_task(t, hist=hist)
+    except Exception as e:
+        reason = str(e)[:300] or e.__class__.__name__
+        check["attempts"] = 1
+        tasks.mark_unavailable(t["id"], note=reason, check=check)
+        msg = f"couldn't finish that just now: {reason}\nkept it on my list, i'll retry and ping u when it works ✅"
+        send(chat_id, msg)
+        return msg
+    tasks.complete_task(t["id"], note="done")
+    return reply
+
+def retry_unavailable():
+    """Re-test every unavailable task. Connector tasks wait for the connector; work that failed is retried."""
+    for t in tasks.unavailable_tasks():
+        check = dict(t.get("check") or {})
+        ctype = check.get("type")
+        if ctype not in ("collector", "any_collector", "retry"):
+            continue
+        chat_id = t["chat_id"]
+        if ctype in ("collector", "any_collector"):
+            if not _check_passes(check):
+                continue
+            ready = f"the thing u asked for earlier is now available ✅\n\n{t['description']}"
+            try:
+                run_task(dict(t, check={**check, "action": check.get("action", "chat")}), announce=lambda: send(chat_id, ready))
+            except Exception as e:
+                reason = str(e)[:300] or e.__class__.__name__
+                check = {"type": "retry", "action": check.get("action", "chat"), "attempts": 1}
+                tasks.mark_unavailable(t["id"], note=reason, check=check)
+                send(chat_id, f"it's connected now but it still failed: {reason}. kept on my list, i'll retry ✅")
+                continue
+            tasks.complete_task(t["id"], note="done")
+            continue
+        # ctype == "retry": the work itself failed earlier; try again quietly
+        attempts = int(check.get("attempts", 0))
+        if attempts >= MAX_RETRY_ATTEMPTS:
+            continue
+        ready = f"the thing u asked for earlier is now available ✅\n\n{t['description']}"
+        try:
+            run_task(t, announce=lambda: send(chat_id, ready))
+        except Exception as e:
+            reason = str(e)[:300] or e.__class__.__name__
+            check["attempts"] = attempts + 1
+            tasks.mark_unavailable(t["id"], note=reason, check=check)
+            if check["attempts"] == MAX_RETRY_ATTEMPTS:
+                send(chat_id, f"gave up retrying '{t['description']}' after many tries. last error: {reason}")
+            print(f"[bot] retry {t['id']} failed ({check['attempts']}): {reason}", flush=True)
+            continue
+        tasks.complete_task(t["id"], note="done")
+
+def handle_tasks(chat_id):
+    items = tasks.list_tasks(chat_id=chat_id)
+    if not items:
+        send(chat_id, "nothing on my list yet. give me work and i'll track it until it's done.")
+        return
+    icon = {"open": "⏳", "done": "✅", "unavailable": "⏸"}
+    lines = []
+    for t in items[-20:]:
+        line = f"{icon.get(t['status'], '•')} #{t['id']} {t['status']}: {t['description'][:90]}"
+        if t.get("note") and t["status"] != "done":
+            line += f"\n    {t['note'][:140]}"
+        lines.append(line)
+    send(chat_id, "your tasks (latest 20):\n" + "\n".join(lines))
+
 SYSTEM_PROMPT = (
     "You are Royce AI, the in-house AI for Royce Marketing Agency, a Nigerian ad agency in Lagos. "
     "You speak like a sharp, friendly colleague: concise, confident, no corporate fluff, light Nigerian flavor is fine. "
     "You know the agency runs Meta, TikTok and Google ad campaigns for clients and maintains a CRM of leads. "
     "Never introduce or re-introduce yourself unless explicitly asked who you are. "
-    "Answer the actual question directly."
+    "Answer the actual question directly. "
+    "You track tasks until completion. If something the user asked for is not available, tell them plainly and say you will notify them when it is, then actually follow up."
 )
 HIST_MAX = 20
 
@@ -70,6 +208,7 @@ REPORT_WORDS = ("report", "performance", "campaign", "campaigns", "spend", "roas
 def handle_report(chat_id, text):
     names = collectors.configured_names()
     if not names:
+        tasks.add_task(chat_id, text, status="unavailable", check={"type": "any_collector", "action": "report"}, note="no ad platform connected")
         send(chat_id, (
             "no ad platforms connected yet. connect at least one so i can pull real numbers:\n\n"
             "• meta: system user token + ad account id. in Meta Business Settings > Users > System users, "
@@ -77,7 +216,7 @@ def handle_report(chat_id, text):
             "account id is the number after act_ in your ad account.\n"
             "• tiktok: business api access token from your TikTok for Business developer app, plus the advertiser id.\n"
             "• google ads: coming soon (needs oauth + developer token).\n\n"
-            "paste them in the reporting page of royce ai."))
+            "paste them in the reporting page of royce ai.\n\nsaved your request on my list. i\'ll run it and ping u the moment a platform is connected ✅"))
         return
     preset = "last_7d"
     for p, words in (("yesterday", ("yesterday",)), ("today", ("today",)), ("last_30d", ("30 days", "month")), ("last_14d", ("14 days", "two weeks")), ("last_7d", ("7 days", "week"))):
@@ -125,6 +264,12 @@ def handle_chat(chat_id, text):
         del hist[:-HIST_MAX]
         return
     if reply is None:
+        cls = classify(text)
+        if cls.get("is_task") is True:
+            reply = run_new_task(chat_id, text, "chat", needs=cls.get("needs"), summary=str(cls.get("summary") or ""), hist=hist)
+            hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
+            del hist[:-HIST_MAX]
+            return
         sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
         reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
     hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
@@ -139,7 +284,7 @@ def handle_update(u):
     if not text: return
     try:
         if text.startswith("/start"):
-            send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\nor just talk to me normally.")
+            send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\n/tasks: what's on my list\n\nor just talk to me normally.")
         elif text.startswith("/script "): handle_script(chat_id, text[8:])
         elif text.startswith("/addlead "):
             p = [x.strip() for x in text[9:].split("|")]
@@ -151,6 +296,7 @@ def handle_update(u):
         elif text == "/report":
             s = db.summary()
             send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
+        elif text == "/tasks": handle_tasks(chat_id)
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)
     except Exception as e:
@@ -164,6 +310,7 @@ def main():
     me = api("getMe")
     print(f"[bot] connected as @{me['result']['username']}", flush=True)
     offset = None
+    last_check = 0
     while True:
         try:
             data = get_updates(offset)
@@ -173,6 +320,12 @@ def main():
         except Exception as e:
             print(f"[bot] poll error: {e}", flush=True)
             time.sleep(3)
+        if time.time() - last_check >= RETRY_EVERY:
+            last_check = time.time()
+            try:
+                retry_unavailable()
+            except Exception as e:
+                print(f"[bot] retry check error: {e}", flush=True)
 
 if __name__ == "__main__":
     main()
