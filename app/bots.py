@@ -25,7 +25,12 @@ TEMPLATES = {
     "funnel-design": ("Funnel design", "Research", "Lead magnets, landing pages and retargeting paths."),
     "reporting-storytelling": ("Reporting storytelling", "Research", "Turns ad metrics into a plain story for the client."),
     "negotiation-closing": ("Negotiation and closing", "Personal Assistant", "Pricing replies, objections and closing lines."),
+    "coordinator": ("Chief of Staff", "Personal Assistant", "Routes work to the specialist bots and reports back."),
 }
+# The Chief of Staff is a built-in coordinator bot. It is seeded once, cannot be deleted, and is not
+# offered in the 'Make a bot' template list (only specialists are).
+COORDINATOR = "coordinator"
+CHIEF_NAME = "Chief of Staff"
 CATEGORIES = ["Featured", "Personal Assistant", "Productivity", "Research", "More"]
 
 
@@ -52,9 +57,12 @@ def _save(data):
 
 
 def templates():
-    """Template catalog for the 'Make a bot' screen. Each entry is real (backed by a skill file)."""
+    """Template catalog for the 'Make a bot' screen. Each entry is real (backed by a skill file).
+    The coordinator template is reserved for the built-in Chief of Staff and is not listed."""
     out = []
     for key, (label, cat, blurb) in TEMPLATES.items():
+        if key == COORDINATOR:
+            continue
         out.append({"key": key, "label": label, "category": cat, "description": blurb})
     return out
 
@@ -68,6 +76,8 @@ def create(name, template=None):
         raise ValueError(f"bot name must be {MAX_NAME} characters or fewer")
     if template and template not in TEMPLATES:
         raise ValueError("unknown template")
+    if template == COORDINATOR:
+        raise ValueError("the coordinator template is reserved for the Chief of Staff")
     bot = {
         "id": uuid.uuid4().hex[:10],
         "name": name,
@@ -82,9 +92,27 @@ def create(name, template=None):
 
 
 def list_bots():
+    """All bots, the Chief of Staff pinned first, then by creation time."""
     with _lock:
         items = list(_load().values())
-    return sorted(items, key=lambda b: b.get("created_at", ""))
+    return sorted(items, key=lambda b: (b.get("template") != COORDINATOR, b.get("created_at", "")))
+
+
+def is_coordinator(bot):
+    return bool(bot) and bot.get("template") == COORDINATOR
+
+
+def ensure_coordinator():
+    """Return the Chief of Staff bot, creating it only if it is missing (idempotent)."""
+    with _lock:
+        data = _load()
+        for b in data.values():
+            if b.get("template") == COORDINATOR:
+                return b
+        bot = {"id": uuid.uuid4().hex[:10], "name": CHIEF_NAME, "template": COORDINATOR, "created_at": _now()}
+        data[bot["id"]] = bot
+        _save(data)
+    return bot
 
 
 def get(bot_id):
@@ -97,6 +125,8 @@ def delete(bot_id):
         data = _load()
         if bot_id not in data:
             return False
+        if is_coordinator(data[bot_id]):
+            raise ValueError("the Chief of Staff cannot be deleted")
         del data[bot_id]
         _save(data)
     return True

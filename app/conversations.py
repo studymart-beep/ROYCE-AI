@@ -36,7 +36,7 @@ def _title(text):
     return t if len(t) <= TITLE_MAX else t[: TITLE_MAX - 3].rstrip() + "..."
 
 
-def append_exchange(conv_id, user_text, reply, task_id=None):
+def append_exchange(conv_id, user_text, reply, task_id=None, meta=None):
     """Store one completed exchange. Creates the conversation when conv_id is None or unknown."""
     now = time.time()
     with _LOCK:
@@ -49,6 +49,8 @@ def append_exchange(conv_id, user_text, reply, task_id=None):
         assistant = {"role": "assistant", "text": reply, "ts": now}
         if task_id:
             assistant["task_id"] = task_id
+        if meta:
+            assistant["meta"] = meta
         conv["messages"].append(assistant)
         conv["updated_at"] = now
         _save(d)
