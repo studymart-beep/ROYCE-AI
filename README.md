@@ -127,3 +127,46 @@ The install needs the server reachable at that URL. The service worker caches on
 Local development: run the server, edit app/static/workspace.html, workspace.css or workspace.js, and refresh.
 The owner token is kept only for the current browser tab (session storage).
 
+
+## Phone app (PWA at /m)
+
+Open /m on an Android or iPhone browser. It shares the same backend as /workspace: chat, chats list,
+tasks (polls every 3 s while one is running), approvals (approve and reject), memory (search and
+forget), provider status (/readyz) and the owner token. Add it to the home screen from the browser
+menu (Android: Install app or Add to Home screen. iPhone: Share, then Add to Home Screen). It opens
+standalone with the Royce icon.
+
+Offline: the app shell (/m, the css and js, icons) is cached by the service worker. /api is always
+the network. With no connection the app says "you're offline. AI needs a connection." and never
+shows a fake answer. The service worker is served at /sw.js with scope "/".
+
+Test locally: `uvicorn app.main:app --port 8000`, then open http://localhost:8000/m on the phone via
+your LAN IP (the phone must reach the server). For a real service worker on a phone you need HTTPS
+(a tunnel or Render). On a desktop browser, http://localhost:8000/m works.
+
+## Desktop app (Tauri, Windows)
+
+desktop/ is a Tauri v2 project that opens the backend workspace in a native Windows window
+(1280x800, min 1024x640). It holds no keys and no token. The backend URL comes from ROYCE_BACKEND_URL
+at build and launch. See desktop/README.md for the exact steps.
+
+Status: the project is complete and validated for config and wiring. The Windows .msi/.exe has not
+been built: Tauri Windows builds must run on Windows, and this repo was prepared on Linux.
+
+## Deployment prep (nothing deployed)
+
+Nothing is deployed. render.yaml describes one Render web service that serves the API, /workspace,
+/m and the PWA. Env vars are listed by name only (values go in the Render dashboard).
+
+- ROYCE_DATA_DIR: point at the persistent disk (render.yaml uses /var/data/royce). Without it, data
+  files stay in the repo root, exactly as before.
+- ALLOWED_ORIGINS: comma-separated origins allowed to call the API cross-origin, for example
+  https://royce-ai.onrender.com,https://your-app.vercel.app. No wildcard, no credentials header.
+  Default (unset): http://localhost:8000 and http://127.0.0.1:8000 only.
+- Auth: owner token (WORKSPACE_TOKEN). Each client sends it as the x-workspace-token header.
+  The workspace and /m store it only in the browser or device localStorage. No frontend bundle
+  contains a secret.
+
+Simplest path: one Render service serves both the PWA and the API, so no CORS is needed.
+Optional: host the static files separately (e.g. Vercel) and set ALLOWED_ORIGINS to that origin.
+Nothing here is deployed; you create the Render service and set the env vars yourself.
