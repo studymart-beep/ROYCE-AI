@@ -10,13 +10,15 @@ import re
 from .llm import chat_text
 from . import workstore
 from . import skills
+from .style import VOICE_RULES, sanitize
 
 CONTENT_SYSTEM = (
     "You are Royce AI for Royce Marketing Agency, a content strategist for Lagos brands. "
     "Plan a 7-day social content calendar. Return STRICT JSON only, no prose, no markdown fences. "
     'Shape: {"days":[{"day":"Monday","format":"short video|carousel|static|reel|story|live",'
     '"idea":"...","hook":"first line of the post or video","cta":"the call to action"}, ... 7 items]} '
-    "Exactly 7 days, Monday to Sunday, in that order. Keep hooks short and specific to the industry."
+    "Exactly 7 days, Monday to Sunday, in that order. Keep hooks short and specific to the industry. "
+    + VOICE_RULES
 )
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -70,4 +72,4 @@ def format_calendar(client, platform, cal):
     lines = [f"7-day content plan for {client} ({platform}):"]
     for d in cal["days"]:
         lines.append(f"\n{d['day']} · {d['format']}\nidea: {d['idea']}\nhook: {d['hook']}\ncta: {d['cta']}")
-    return "\n".join(lines)
+    return sanitize("\n".join(lines))

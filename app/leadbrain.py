@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from .llm import chat_text
 from . import db
 from . import skills
+from .style import VOICE_RULES, sanitize
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_PATH = os.path.join(BASE, "nudge_state.json")
@@ -19,7 +20,8 @@ OWNER_CHAT_ID = int(os.environ.get("OWNER_CHAT_ID", "7531626960"))  # fallback u
 
 FOLLOWUP_SYSTEM = (
     "You are Royce AI for Royce Marketing Agency. Write a short follow-up message to a lead "
-    "in a warm professional Nigerian tone. Reference their business. Max 3 sentences. Return just the message."
+    "in a warm professional Nigerian tone. Reference their business. Max 3 sentences. Return just the message. "
+    + VOICE_RULES
 )
 
 
@@ -41,7 +43,7 @@ def draft_followup(lead, context=""):
     user = "\n".join(lines) + "\n\nWrite the follow-up message now."
     text = chat_text([{"role": "system", "content": FOLLOWUP_SYSTEM + skills.engine_skill("followup")},
                       {"role": "user", "content": user}], temperature=0.7, timeout=30)
-    return text.strip().strip('"').strip()
+    return sanitize(text.strip().strip('"').strip())
 
 
 def find_lead(query):

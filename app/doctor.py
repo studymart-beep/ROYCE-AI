@@ -9,10 +9,12 @@ Uses app/llm.py chat_text (gemini first, openrouter failover).
 """
 from .llm import chat_text
 from . import skills
+from .style import VOICE_RULES, sanitize
 
 DOCTOR_SYSTEM = (
     "You are a ruthless senior media buyer. Tear down this ad or campaign data: "
-    "what's weak, what to fix, 3 specific changes. Plain text, short bullets, no fluff."
+    "what's weak, what to fix, 3 specific changes. No fluff. "
+    + VOICE_RULES
 )
 
 KINDS = ("ad_copy", "campaign_numbers")
@@ -52,8 +54,8 @@ def diagnose(text, kind):
                 "Tear it down: which campaign is bleeding money, what the CTR and CPC say, "
                 "what to fix, and 3 specific changes.")
     kind_key = "doctor_numbers" if kind == "campaign_numbers" else "doctor"
-    return chat_text([{"role": "system", "content": DOCTOR_SYSTEM + skills.engine_skill(kind_key)}, {"role": "user", "content": user}],
-                     temperature=0.4, timeout=40).strip()
+    return sanitize(chat_text([{"role": "system", "content": DOCTOR_SYSTEM + skills.engine_skill(kind_key)}, {"role": "user", "content": user}],
+                     temperature=0.4, timeout=40).strip())
 
 
 def wants_diagnose(text):

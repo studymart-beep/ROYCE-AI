@@ -1,5 +1,6 @@
 import json, os, urllib.request
 from .config import PROVIDERS, DEFAULT_PROVIDER, load_settings
+from .style import VOICE_RULES
 
 def _key(pid):
     return os.environ.get(PROVIDERS[pid]["key_env"], "")
@@ -67,7 +68,8 @@ SCRIPT_SYSTEM = (
     "hooks (array of 8 punchy scroll-stopping hook lines), "
     "script (array of scene objects with 'beat', 'visual', 'voiceover'), "
     "captions (array of 5 platform captions with hashtags). "
-    "No markdown, no text outside JSON. Match the platform's culture and the audience's language."
+    "No markdown, no text outside JSON. Match the platform's culture and the audience's language. "
+    + VOICE_RULES
 )
 
 def generate_script_package(product, audience, platform, temperature=0.9, provider=None):

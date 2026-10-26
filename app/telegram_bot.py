@@ -4,6 +4,7 @@ from . import imagegen
 from . import db, collectors, workstore, tasks
 from . import leadbrain
 from . import skills
+from .style import VOICE_RULES, sanitize
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -71,7 +72,7 @@ def download_photo(msg):
     return data, mime
 
 def send(chat_id, text):
-    text = text.strip() or "(empty)"
+    text = sanitize(text or "") or "(empty)"
     while text:
         chunk, text = text[:3900], text[3900:]
         api("sendMessage", chat_id=chat_id, text=chunk)
@@ -315,7 +316,8 @@ SYSTEM_PROMPT = (
     "You know the agency runs Meta, TikTok and Google ad campaigns for clients and maintains a CRM of leads. "
     "Never introduce or re-introduce yourself unless explicitly asked who you are. "
     "Answer the actual question directly. "
-    "You track tasks until completion. If something the user asked for is not available, tell them plainly and say you will notify them when it is, then actually follow up."
+    "You track tasks until completion. If something the user asked for is not available, tell them plainly and say you will notify them when it is, then actually follow up. "
+    + VOICE_RULES
 )
 HIST_MAX = 20
 
