@@ -95,3 +95,11 @@ Daily nudges: the bot checks at most once an hour. If any open lead has a next_f
 
 Six markdown playbooks live in skills/ (direct-response, brand-strategy, social-growth, funnel-design, reporting-storytelling, negotiation-closing). Each has a front matter block with name and description. app/skills.py lists them (list_skills), reads one (get_skill), and picks the most relevant ones for a message by whole-word keyword match (select_skills). Chat injects at most 2 playbooks per turn (skill_block). The /followup, /doctor and /content engines each get their default playbook (engine_skill): followup uses negotiation-closing, doctor uses direct-response (reporting-storytelling for campaign numbers), content uses social-growth. /skills in the bot lists the playbooks with one-line descriptions. To add one, drop a new .md file in skills/ with name and description front matter, and add its keywords to KEYWORDS in app/skills.py.
 
+## Phase 2: engineering reliability
+
+- Tools layer (app/agent/tools.py): whitelisted registry. run_tests, git_status, git_log, git_diff, db_backup, health_check. No arbitrary shell from user text.
+- Scheduled backups and self-check (app/agent/jobs.py): backup every 6 h (keeps newest 10 in backups/), self-check every 1 h written to logs/health.json. Run `/health` in the bot for the latest status.
+- Audit log (app/agent/audit.py): logs/audit.jsonl, append-only, no message content or secrets.
+- Coding playbooks: skills/coding/codebase.md and debugging.md, added to the bot prompt for code and debug questions.
+- Tests: `.venv/bin/python -m pytest -q tests`.
+

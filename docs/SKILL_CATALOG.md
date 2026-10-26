@@ -22,13 +22,22 @@ Scope note: the capability list in the phase 1 brief was cut off after item 21 (
 | 12 | Progress and status reporting | implemented (partial) | app/telegram_bot.py (/tasks, "on it" acks) | /tasks lists open, done and unavailable items. No live progress for long jobs. |
 | 13 | Error explanation and recovery guidance | implemented (partial) | app/telegram_bot.py (error messages, "kept on my list") | errors are surfaced with the reason and the task is kept for retry. |
 | 14 | User preference adaptation | planned | app/agent/memory.py (preferences saved by heuristic) | heuristic captures "I prefer" and similar. No learned preference model yet. |
-| 15 | Codebase understanding | planned | none | phase 6 candidate. |
-| 16 | Autonomous coding | planned | none | blocked on a decision: autonomous commits to a production repo need the owner's explicit approval. |
-| 17 | Debugging and root-cause analysis | planned | none | |
-| 18 | Test generation and execution | planned | tests/unit/ (phase 1 baseline) | the phase 1 test suite exists; automated generation does not. |
+| 15 | Codebase understanding | implemented (phase 2) | skills/coding/codebase.md, app/skills.py coding_block | playbook injected for code questions. Not an agent tool yet: the bot does not run repo scans itself. |
+| 16 | Autonomous coding | planned | none | blocked on a decision: autonomous commits to a production repo need the owner's explicit approval. Phase 2 commits were made on the owner's direct instruction and are not autonomous. |
+| 17 | Debugging and root-cause analysis | implemented (phase 2) | skills/coding/debugging.md, app/skills.py coding_block | reproduce, isolate, minimal fix, verify method injected for debug questions. No automatic debugger. |
+| 18 | Test generation and execution | implemented (partial, phase 2) | app/agent/tools.py run_tests, tests/unit/ | run_tests runs the unit suite via a whitelisted pytest call (300 s cap). Test generation not built. |
 | 19 | Code review | planned | none | |
-| 20 | Git and version control | planned | git used manually in the repo | no agent-driven git yet. |
+| 20 | Git and version control | implemented (partial, phase 2, read-only) | app/agent/tools.py git_status, git_log, git_diff | read-only. No commit or push tool. |
 | 21 | (cut off in the brief) | unknown | none | name not received. |
+
+## Phase 2 engineering reliability (summary)
+
+- Tools layer, whitelisted: app/agent/tools.py (run_tests, git_status, git_log, git_diff, db_backup, health_check). Unknown names and extra args are refused.
+- Backups: db_backup copies crm.db to backups/crm-TIMESTAMP.db, keeps newest 10. Runs every 6 h from app/agent/jobs.py.
+- Self-check: app/agent/jobs.py runs hourly (LLM providers configured, DB reachable, disk space), writes logs/health.json (latest only). /health in the bot shows it.
+- Audit: app/agent/audit.py appends logs/audit.jsonl (actor, action, target, outcome; redacted; no message content).
+- Coding skills: skills/coding/codebase.md, skills/coding/debugging.md.
+- Gaps: no owner-approved autonomous commits; git push depends on sandbox credentials.
 
 ## Items 22 to 104
 
