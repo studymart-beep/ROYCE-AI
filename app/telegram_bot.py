@@ -36,6 +36,24 @@ def send_photo(chat_id, data, caption=""):
     with urllib.request.urlopen(req, timeout=70) as r:
         return json.loads(r.read())
 
+def send_voice(chat_id, data, caption=""):
+    """Upload ogg opus bytes as a Telegram voice note (multipart sendVoice)."""
+    boundary = "----royce" + os.urandom(8).hex()
+    parts = []
+    def field(name, value):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    field("chat_id", str(chat_id))
+    if caption:
+        field("caption", caption[:1000])
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="voice"; filename="royce.ogg"\r\nContent-Type: audio/ogg\r\n\r\n'.encode())
+    parts.append(data)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    body = b"".join(parts)
+    req = urllib.request.Request(f"https://api.telegram.org/bot{TOKEN}/sendVoice", data=body,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=70) as r:
+        return json.loads(r.read())
+
 def download_photo(msg):
     """Largest size of a Telegram photo message, returned as (bytes, mime)."""
     sizes = msg.get("photo") or []
@@ -394,6 +412,13 @@ def handle_chat(chat_id, text):
         hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent content calendar]"}]
         del hist[:-HIST_MAX]
         return
+    vm = re.search(r"\b(say (this|that|it) in voice|reply in voice|voice (note|reply)|in a voice note)\b", low)
+    if vm:
+        spoken = re.sub(r"\b(say (this|that|it) in voice|reply in voice|voice (note|reply)|in a voice note)\b[:,]?\s*", "", text, flags=re.I).strip()
+        handle_voice(chat_id, spoken or "royce ai here, what do you need")
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent voice note]"}]
+        del hist[:-HIST_MAX]
+        return
     if reply is None:
         cls = classify(text)
         if cls.get("is_task") is True:
@@ -465,6 +490,29 @@ def handle_content(chat_id, arg):
         send(chat_id, "couldn't build the calendar right now (the llm is busy). try again in a minute.")
 
 
+def handle_voice(chat_id, text):
+    from . import voice
+    text = (text or "").strip()
+    if not text:
+        send(chat_id, "usage: /voice <what to say>\nexample: /voice royce is online, send me the lead list")
+        return
+    api("sendChatAction", chat_id=chat_id, action="record_voice")
+    try:
+        data = voice.tts(text)
+    except voice.VoiceUnavailable as e:
+        send(chat_id, str(e))
+        return
+    except Exception as e:
+        print("[bot] voice error", e)
+        send(chat_id, voice.NO_PROVIDER_MSG)
+        return
+    try:
+        send_voice(chat_id, data)
+    except Exception as e:
+        print("[bot] sendVoice error", e)
+        send(chat_id, "made the voice but telegram rejected the upload. try again in a minute.")
+
+
 def handle_content_chat(chat_id, client):
     send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
 
@@ -500,6 +548,7 @@ def handle_update(u):
         elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
         elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
         elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
+        elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)

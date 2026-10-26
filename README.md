@@ -78,3 +78,15 @@ Tests: the task store is covered by a quick check (add, complete, unavailable lo
 Mini app: each lead row on the leads page has a "draft followup" link that calls GET /api/leads/{id}/followup and shows the draft inline.
 
 Daily nudges: the bot checks at most once an hour. If any open lead has a next_followup due today or overdue, it sends one message listing them with a one-line reason each, at most once per Lagos day. The nudge goes to the last private chat that messaged the bot (falls back to the owner chat id). State lives in nudge_state.json (git-ignored).
+
+## Ad doctor (teardowns)
+
+/doctor <paste ad copy or campaign numbers> tears it down: what's weak, what to fix, and 3 specific changes. Copy goes in as ad_copy; numbers that mention ctr/cpc/spend/impressions/clicks are read as campaign_numbers. /doctor with nothing after it, or chat like "check my campaigns", pulls the last 7 days from connected collectors first and diagnoses those real rows. Chat detection also catches "roast this ad" and "why is my ctr bad". Logic is in app/doctor.py diagnose(text, kind). The reports page has a "diagnose" button that POSTs the current rows to POST /api/diagnose.
+
+## Content engine (weekly calendars)
+
+/content <client> | <industry> | <platform> builds a 7-day calendar (day, format, idea, hook, cta) with strict JSON from the LLM and saves it to generated work as type content_calendar. Chat like "content plan for X" asks for the industry and platform in one line. Logic is in app/content.py weekly_calendar(client, industry, platform). The generated work page shows calendars as cards next to ad packages.
+
+## Voice replies (tts)
+
+/voice <text> or chat like "reply in voice" / "say this in voice" makes a voice note (ogg opus, sendVoice). app/voice.py tts(text) tries openai_tts first (needs OPENAI_API_KEY, skipped when absent), then openrouter_tts (OpenRouter audio model, default openai/gpt-audio-mini, needs OpenRouter audio access and balance). If neither works, the bot replies "voice needs an openai key or openrouter audio model access" and keeps running. Override models with OPENAI_TTS_MODEL, OPENROUTER_AUDIO_MODEL, OPENAI_TTS_VOICE, OPENROUTER_TTS_VOICE.
