@@ -130,7 +130,7 @@
     list.textContent = "loading bots...";
     api("GET", "/bots").then((d) => {
       clear(list);
-      if (!d.bots.length) { list.appendChild(empty("no bots yet. make one in the main panel.")); return; }
+      if (!d.bots.length) { list.appendChild(empty("no bots yet.")); return; }
       d.bots.forEach((b) => {
         const item = el("button", "side-item");
         item.type = "button";
@@ -187,22 +187,18 @@
     const body = clear($("pageBody"));
     const hero = el("div", "hero");
     hero.style.paddingTop = "10px";
-    hero.appendChild(el("p", "page-kicker", "Royce AI \u00b7 Make a bot"));
-    hero.appendChild(el("h2", "", "Make a bot"));
-    hero.appendChild(el("p", "", "Name it, pick a face, pick a playbook. Every bot pins one marketing playbook into the chat."));
+    hero.appendChild(el("p", "page-kicker", "Royce AI \u00b7 Bots"));
+    hero.appendChild(el("h2", "", "Chief of Staff"));
     body.appendChild(hero);
-    const makeWrap = el("div");
-    body.appendChild(makeWrap);
     const list = el("div", "grid");
     body.appendChild(el("div", "sec", "Your bots"));
     body.appendChild(list);
     try {
-      const [bots, tpl] = await Promise.all([api("GET", "/bots"), api("GET", "/bots/templates")]);
-      if (!bots.bots.length) list.appendChild(empty("no bots yet. make one below."));
+      const bots = await api("GET", "/bots");
+      if (!bots.bots.length) list.appendChild(empty("no bots yet."));
       bots.bots.forEach((b) => list.appendChild(botCard(b)));
       const sel = bots.bots.find((b) => b.id === state.selectedBot);
-      if (sel) body.insertBefore(botChatPanel(sel), makeWrap.previousSibling);
-      renderMakeBot(makeWrap, tpl.templates || []);
+      if (sel) body.insertBefore(botChatPanel(sel), hero);
     } catch (e) {
       list.appendChild(notice("couldn't load bots: " + e.message));
     }
@@ -258,114 +254,6 @@
     });
     return wrap;
   }
-  function renderMakeBot(wrap, templates) {
-    clear(wrap);
-    const hero = el("div", "hero");
-    hero.style.paddingTop = "6px";
-    const faces = ["/static/mascot.png"];
-    const faceRow = el("div", "bot-avatars");
-    faceRow.style.justifyContent = "center";
-    faceRow.style.marginBottom = "14px";
-    faces.forEach((src, i) => {
-      const b = el("button", "av");
-      b.type = "button";
-      b.setAttribute("role", "radio");
-      b.setAttribute("aria-checked", i === 0 ? "true" : "false");
-      b.setAttribute("aria-label", "Royce mascot");
-      b.style.width = "76px"; b.style.height = "76px"; b.style.borderRadius = "50%";
-      b.style.borderColor = "var(--accent)";
-      const img = document.createElement("img");
-      img.src = src; img.alt = "";
-      img.style.borderRadius = "50%";
-      b.appendChild(img);
-      faceRow.appendChild(b);
-    });
-    hero.appendChild(faceRow);
-    const form = el("form");
-    form.autocomplete = "off";
-    form.style.maxWidth = "560px"; form.style.margin = "0 auto"; form.style.width = "100%";
-    const pill = el("div", "name-pill");
-    const name = el("input", "");
-    name.id = "botName";
-    name.maxLength = 60;
-    name.placeholder = "Name your bot";
-    name.setAttribute("aria-label", "Bot name");
-    const goBtn = el("button", "send-fab", "\u2191");
-    goBtn.type = "submit";
-    goBtn.setAttribute("aria-label", "create bot");
-    pill.appendChild(name);
-    pill.appendChild(goBtn);
-    form.appendChild(pill);
-    const status = el("div", "small muted", "");
-    status.style.textAlign = "center"; status.style.marginTop = "8px";
-    status.setAttribute("aria-live", "polite");
-    form.appendChild(status);
-    hero.appendChild(form);
-    wrap.appendChild(hero);
-    // templates
-    const secT = el("div", "sec", "Templates");
-    wrap.appendChild(secT);
-    const tabs = el("div", "tabs");
-    tabs.setAttribute("role", "tablist");
-    let picked = templates[0] ? templates[0].key : null;
-    let filter = "Featured";
-    const tabNames = ["Featured"];
-    templates.slice(0, 4).forEach((t) => tabNames.push(t.label || t.key));
-    if (templates.length > 4) tabNames.push("More");
-    const cards = el("div", "template-grid");
-    function visibleTemplates() {
-      if (filter === "Featured" || filter === "More") return templates;
-      return templates.filter((t) => (t.label || t.key) === filter);
-    }
-    function paintCards() {
-      clear(cards);
-      const vis = visibleTemplates();
-      if (!vis.length) { cards.appendChild(empty("no templates in this group yet.")); return; }
-      vis.forEach((t) => {
-        const c = el("div", "template-card");
-        const isSel = picked === t.key;
-        if (isSel) { c.style.borderColor = "var(--accent-line)"; }
-        c.appendChild(el("div", "t-ico", "\u2726"));
-        c.appendChild(el("h3", "", t.label || t.key));
-        c.appendChild(el("p", "", t.description || ""));
-        const sel = btn(isSel ? "Selected" : "Use template", isSel ? "primary small" : "small", () => { picked = t.key; paintCards(); }, "use template " + (t.label || t.key));
-        const row = el("div", "row", ""); row.appendChild(sel);
-        c.appendChild(row);
-        cards.appendChild(c);
-      });
-    }
-    tabNames.forEach((tn) => {
-      const t = el("button", "tab", tn);
-      t.type = "button";
-      t.setAttribute("role", "tab");
-      t.setAttribute("aria-selected", tn === filter ? "true" : "false");
-      t.addEventListener("click", () => {
-        filter = tn;
-        tabs.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", x.textContent === tn ? "true" : "false"));
-        paintCards();
-      });
-      tabs.appendChild(t);
-    });
-    wrap.appendChild(tabs);
-    wrap.appendChild(cards);
-    paintCards();
-    form.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      const n = name.value.trim();
-      if (!n) { toast("give the bot a name", true); name.focus(); return; }
-      goBtn.disabled = true;
-      try {
-        const bot = await api("POST", "/bots", { name: n, template: picked });
-        toast("bot created: " + bot.name);
-        name.value = "";
-        renderBots();
-        sideBots();
-      } catch (e) {
-        status.textContent = e.message;
-      } finally { goBtn.disabled = false; }
-    });
-  }
-
   function fmtDate(v) {
     if (!v) return "";
     const d = new Date(typeof v === "number" ? v * 1000 : v);
