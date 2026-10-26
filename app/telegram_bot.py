@@ -1,6 +1,6 @@
 import json, os, re, time, urllib.request, urllib.parse
 from .llm import chat_text, generate_script_package
-from . import db, collectors
+from . import db, collectors, workstore
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -45,6 +45,7 @@ def handle_script(chat_id, arg):
     product, audience, platform = parts[0], parts[1], parts[2].lower()
     api("sendChatAction", chat_id=chat_id, action="typing")
     pkg = generate_script_package(product, audience, platform)
+    workstore.add_package(pkg, product, audience, platform, source="telegram")
     hooks = "\n".join(f"{i+1}. {h}" for i, h in enumerate(pkg.get("hooks", [])))
     script = "\n".join(f"• {s.get('beat','')}: {s.get('visual','')} — {s.get('voiceover','')}" for s in pkg.get("script", []))
     caps = "\n\n".join(pkg.get("captions", []))
@@ -115,7 +116,14 @@ def handle_chat(chat_id, text):
         del hist[:-HIST_MAX]
         return
     if re.search(r"\b(script|scripts|hooks?|captions?|ad package)\b", low) and re.search(r"\b(make|generate|create|write|give me)\b", low):
-        reply = ("Lets do it properly. Give me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
+        reply = ("send me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
+    parts = [p.strip() for p in text.split("|")]
+    if reply is None and len(parts) == 3 and all(parts):
+        # conversational ad generation: "product | audience | platform" in chat
+        handle_script(chat_id, text)
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[generated ad package]"}]
+        del hist[:-HIST_MAX]
+        return
     if reply is None:
         sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
         reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)

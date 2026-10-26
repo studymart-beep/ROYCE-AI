@@ -1,13 +1,13 @@
 import os
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from . import db
 from .scripts_engine import build_script_prompt, normalize_script
 from .llm import generate_script_package
 from .config import provider_status, load_settings, save_settings, DEFAULT_PROVIDER
-from .reporting import csv_totals
 from . import collectors
+from . import workstore
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(BASE, "app", "static")
@@ -21,6 +21,8 @@ def scripts_page(): return FileResponse(os.path.join(STATIC, "scripts.html"))
 def crm_page(): return FileResponse(os.path.join(STATIC, "crm.html"))
 @app.get("/reporting")
 def reporting_page(): return FileResponse(os.path.join(STATIC, "reporting.html"))
+@app.get("/connectors")
+def connectors_page(): return FileResponse(os.path.join(STATIC, "connectors.html"))
 
 @app.get("/api/settings")
 def get_settings(): return provider_status()
@@ -42,7 +44,11 @@ async def api_script(req: Request):
     if not product or not audience:
         return JSONResponse({"error": "product and audience required"}, status_code=400)
     pkg = generate_script_package(product, audience, platform, provider=d.get("provider"))
+    workstore.add_package(pkg, product, audience, platform, source="mini app")
     return pkg
+
+@app.get("/api/work")
+def api_work(): return workstore.list_work()
 
 @app.get("/api/leads")
 def api_leads(): return db.list_leads()
@@ -62,10 +68,6 @@ async def api_update_lead(lid: int, req: Request):
 
 @app.get("/api/report/summary")
 def api_report_summary(): return db.summary()
-
-@app.post("/api/report/upload")
-async def api_report_upload(file: UploadFile = File(...)):
-    return csv_totals(await file.read())
 
 @app.get("/api/collectors")
 def api_collectors(): return collectors.status()

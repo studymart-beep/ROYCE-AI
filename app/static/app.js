@@ -45,9 +45,10 @@ if(page==='home'){
     <div class=col-side>
       <div class=card>
         <h2 class=h2 style="margin-bottom:6px">Quick actions</h2>
-        <a class=qa href=/scripts><span class=ico>✦</span>Generate an ad script<span class=chev>›</span></a>
-        <a class=qa href=/crm><span class=ico>+</span>Add a lead<span class=chev>›</span></a>
-        <a class=qa href=/reporting><span class=ico>▤</span>Pull an ad report<span class=chev>›</span></a>
+        <a class=qa href=/scripts><span class=ico>✦</span>View generated ads<span class=chev>›</span></a>
+        <a class=qa href=/crm><span class=ico>◎</span>View leads<span class=chev>›</span></a>
+        <a class=qa href=/reporting><span class=ico>▤</span>View reports<span class=chev>›</span></a>
+        <p class=muted style="margin-top:10px">tell Royce in the chat what u need. he does the work.</p>
       </div>
       <section class=cta>
         <span class=mark>↗</span>
@@ -131,76 +132,87 @@ if(page==='home'){
   }).catch(()=>{});
 }
 else if(page==='scripts'){
-  main.innerHTML = `<div class=card><h2 class=h2 style="margin-bottom:8px">Generate ad package</h2>
-    <input id=product placeholder="product (e.g. NOISE earbuds)">
-    <input id=audience placeholder="audience (e.g. young Lagos commuters)">
-    <select id=platform><option>tiktok</option><option>instagram</option><option>facebook</option><option>google</option></select>
-    <select id=provider><option value="">auto (gemini, failover)</option><option value=gemini>gemini</option><option value=openrouter>openrouter</option></select>
-    <button onclick=gen()>✦ generate</button></div><div id=out></div>`;
-  window.gen = async () => {
-    const out = document.getElementById('out');
-    out.innerHTML = Array(6).fill('<div class=skeleton></div>').join('');
-    try{
-      const r = await fetch('/api/script',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({product:product.value,audience:audience.value,platform:platform.value,provider:provider.value||undefined})});
-      const p = await r.json();
-      if(p.error){out.innerHTML=`<div class=card>${esc(p.error)}</div>`;return}
-      out.innerHTML = `<div class=card><h2 class=h2 style="margin-bottom:8px">Hooks</h2>${p.hooks.map((h,i)=>`<div class=hook>${i+1}. ${esc(h)}</div>`).join('')}</div>
-      <div class=card><h2 class=h2 style="margin-bottom:8px">Script</h2>${p.script.map(s=>`<div class=hook><b>${esc(s.beat)}</b><br>${esc(s.visual)}<br><i>${esc(s.voiceover||'')}</i></div>`).join('')}</div>
-      <div class=card><h2 class=h2 style="margin-bottom:8px">Captions</h2>${p.captions.map(c=>`<div class=hook>${esc(c)}</div>`).join('')}</div>`;
-    }catch(e){out.innerHTML=`<div class=card>generation failed, try again</div>`}
-  };
+  skel(3);
+  const agoOrDate = s => ago(s) || '';
+  fetch('/api/work').then(r=>r.json()).then(items=>{
+    if(!items.length){
+      main.innerHTML = `<div class="card empty"><h2 class=h2 style="margin-bottom:6px">Generated work</h2>ask Royce in the chat to generate ur first ad</div>`;
+      return;
+    }
+    main.innerHTML = `<div class=hero style="margin-bottom:4px"><div><p class=eyebrow>✦ Generated work</p><h1 class=h1>${items.length} ad package${items.length>1?'s':''}</h1><p class=sub>newest first. tell Royce in the chat to make more.</p></div></div>`
+      + items.map(w=>`
+      <div class=card>
+        <div class=card-head><div><h2 class=h2>${esc(w.product)}</h2><p class=muted>${esc(w.audience)} · ${esc(w.platform)} · ${esc(agoOrDate(w.created_at))} · via ${esc(w.source||'mini app')}</p></div></div>
+        <p class=stat-label style="margin-top:6px">hooks</p>
+        ${(w.hooks||[]).map((h,i)=>`<div class=hook>${i+1}. ${esc(h)}</div>`).join('')}
+        <p class=stat-label style="margin-top:12px">script</p>
+        ${(w.script||[]).map(x=>`<div class=hook><b>${esc(x.beat)}</b><br>${esc(x.visual)}<br><i>${esc(x.voiceover||'')}</i></div>`).join('')}
+        <p class=stat-label style="margin-top:12px">captions</p>
+        ${(w.captions||[]).map(c=>`<div class=hook>${esc(c)}</div>`).join('')}
+      </div>`).join('');
+  }).catch(()=>{ main.innerHTML = '<div class="card empty">could not load generated work, refresh to try again</div>'; });
 }
 else if(page==='crm'){
-  skel(3); window._leads = [];
-  const load = () => fetch('/api/leads').then(r=>r.json()).then(l=>{_leads=l;render()});
-  const render = () => {
-    main.innerHTML = `<div class=card><h2 class=h2 style="margin-bottom:8px">Add lead</h2>
-    <input id=n placeholder="name"><input id=b placeholder="business"><input id=c placeholder="contact"><input id=f type=date>
-    <button onclick=add()>+ add lead</button></div>
-    <div class=card><div class=card-head><h2 class=h2>Leads (${_leads.length})</h2></div>
-    ${_leads.length? `<div class=table-wrap><table><tr><th>name</th><th>status</th><th>follow-up</th><th></th></tr>`+_leads.map(l=>`
+  skel(3);
+  const load = () => fetch('/api/leads').then(r=>r.json()).then(leads=>{
+    main.innerHTML = `<div class=card><div class=card-head><h2 class=h2>Leads (${leads.length})</h2><span class=muted>leads are added by Royce in the chat</span></div>
+    ${leads.length? `<div class=table-wrap><table><tr><th>name</th><th>status</th><th>follow-up</th><th>update</th></tr>`+leads.map(l=>`
       <tr><td><b>${esc(l.name)}</b>${isNew(l)?'<span class=pill-new>New</span>':''}<br><span class=muted>${esc(l.business||'')} ${esc(l.contact||'')}</span></td>
       <td><span class="badge ${esc(l.status)}">${esc(l.status)}</span></td><td>${esc(l.next_followup||'-')}</td>
-      <td><select onchange=st(${Number(l.id)},this.value)><option${l.status=='open'?' selected':''}>open</option><option${l.status=='won'?' selected':''}>won</option><option${l.status=='lost'?' selected':''}>lost</option></select></td></tr>`).join('')+`</table></div>`
-    : `<div class=empty>no leads yet<br>add your first one above</div>`}</div>`;
-  };
-  window.add = async () => {
-    await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:n.value,business:b.value,contact:c.value,next_followup:f.value||null})});
-    n.value=b.value=c.value=f.value=''; load();
-  };
+      <td><select onchange="st(${Number(l.id)},this.value)"><option${l.status=='open'?' selected':''}>open</option><option${l.status=='won'?' selected':''}>won</option><option${l.status=='lost'?' selected':''}>lost</option></select></td></tr>`).join('')+`</table></div>`
+    : `<div class=empty>no leads yet. tell Royce in the chat to add one.</div>`}</div>`;
+  });
   window.st = (id,v) => fetch('/api/leads/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:v})}).then(load);
   load();
 }
 else if(page==='reporting'){
-  main.innerHTML = `<div class=card><h2 class=h2 style="margin-bottom:6px">Connected platforms</h2>
-  <p class=muted>tokens are stored on the server and never shown back.</p>
-  <div id=platforms><div class=skeleton></div></div></div>
-  <div class=card><h2 class=h2 style="margin-bottom:8px">Pull report</h2>
-  <select id=preset><option value=last_7d>last 7 days</option><option value=last_14d>last 14 days</option><option value=last_30d>last 30 days</option><option value=yesterday>yesterday</option><option value=today>today</option></select>
-  <button onclick=pull()>Pull report</button></div>
-  <div class=card><h2 class=h2 style="margin-bottom:6px">Upload ad spend CSV</h2>
-  <p class=muted>columns: campaign, spend, impressions, clicks</p>
-  <input type=file id=csv accept=.csv><button onclick=up()>Analyze</button></div><div id=out></div>`;
-  const table = rows => `<div class=card><div class=table-wrap><table><tr><th>platform</th><th>campaign</th><th>spend</th><th>impr</th><th>clicks</th><th>ctr</th><th>cpc</th></tr>
-    ${rows.map(r=>`<tr><td>${esc(r.platform)}</td><td>${esc(r.campaign)}</td><td>${esc(r.spend)}</td><td>${esc(r.impressions)}</td><td>${esc(r.clicks)}</td><td>${esc(r.ctr)}%</td><td>${esc(r.cpc)}</td></tr>`).join('')}</table></div></div>`;
-  const loadPlatforms = async () => {
+  main.innerHTML = `<div class=card><div class=card-head><div><h2 class=h2>Campaign report</h2><p class=muted id=rep-meta>merged from every connected ad platform</p></div>
+    <button class="btn sm" id=refresh>↻ refresh</button></div>
+    <div id=rep-body><div class=skeleton></div><div class=skeleton></div></div></div>`;
+  const esc2 = esc;
+  const table = rows => `<div class=table-wrap><table><tr><th>platform</th><th>campaign</th><th>spend</th><th>impr</th><th>clicks</th><th>ctr</th><th>cpc</th></tr>
+    ${rows.map(r=>`<tr><td>${esc2(r.platform)}</td><td>${esc2(r.campaign)}</td><td>${esc2(r.spend)}</td><td>${esc2(r.impressions)}</td><td>${esc2(r.clicks)}</td><td>${esc2(r.ctr)}%</td><td>${esc2(r.cpc)}</td></tr>`).join('')}</table></div>`;
+  const load = async () => {
+    const body = document.getElementById('rep-body');
+    body.innerHTML = '<div class=skeleton></div><div class=skeleton></div>';
+    try{
+      const r = await fetch('/api/report/all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preset:'last_7d'})});
+      const j = await r.json();
+      if(!r.ok){ body.innerHTML = `<p class=muted>${esc(j.error||'no report yet')}. connect an ad platform on the connectors page.</p>`; return; }
+      document.getElementById('rep-meta').textContent = `last 7 days · from ${(j.configured||[]).join(', ') || 'connected platforms'}`;
+      const errs = (j.errors||[]).map(e=>`<p class=muted>${esc(e.collector)}: ${esc(e.error)}</p>`).join('');
+      const summary = j.summary ? `<div class=hook>${esc(j.summary)}</div>` : '';
+      body.innerHTML = summary + (j.rows && j.rows.length ? table(j.rows) : '<div class=empty>no campaign rows for this period</div>') + errs;
+    }catch(e){ body.innerHTML = '<p class=muted>could not load the report, hit refresh to retry</p>'; }
+  };
+  document.getElementById('refresh').onclick = load;
+  load();
+}
+else if(page==='connectors'){
+  main.innerHTML = `<div class=card><h2 class=h2 style="margin-bottom:6px">Connectors</h2><p class=muted>connect the ad platforms royce pulls numbers from. tokens are stored on the server and never shown back.</p></div><div id=conns><div class=skeleton></div></div>`;
+  const help = {
+    meta: 'System user token from Meta Business Settings > Users > System users > Generate token (ads_read permission). account id is the ad account number without act_.',
+    tiktok: 'Access token from your TikTok for Business developer app (Reporting read scope), plus your TikTok Ads Manager advertiser id.',
+  };
+  const draw = async () => {
     const st = await (await fetch('/api/collectors')).json();
-    document.getElementById('platforms').outerHTML = `<div id=platforms>` + Object.entries(st).map(([name,c])=>`
-      <div class=conn>
-        <p><span class="dot ${c.configured?'':'off'}"></span><b>${esc(c.label)}</b> ${c.configured?`<span class=muted>connected (${esc(c.account_id)})</span>`:'<span class=muted>not connected</span>'}</p>
-        <p class=muted>${esc(c.token_help)}</p>
-        ${name==='google' ? '' : `<div class=row-inputs><input id=tok-${name} placeholder="access token" type=password><input id=acc-${name} placeholder="${esc(c.account_label)}">
-          <div class=btn-row><button class="btn sm" onclick="saveC('${name}')">save</button><button class="btn sm ghost" onclick="testC('${name}')">test</button></div>
-          <div id=msg-${name} class=muted></div></div>`}
-      </div>`).join('') + `</div>`;
+    document.getElementById('conns').innerHTML = Object.entries(st).map(([name,c])=>`
+      <div class=card>
+        <div class=card-head><div><h2 class=h2><span class="dot ${c.configured?'':'off'}"></span>${esc(c.label)}</h2>
+        <p class=muted>${c.configured?`connected (${esc(c.account_id)})`:'not connected'}</p></div></div>
+        ${name==='google' ? '<p class=muted>needs oauth, coming soon</p>' : `
+        <p class=muted>${esc(help[name]||c.token_help||'')}</p>
+        <input id=tok-${name} placeholder="access token" type=password>
+        <input id=acc-${name} placeholder="${esc(c.account_label)}">
+        <div class=btn-row><button class="btn sm" onclick="saveC('${name}')">save</button><button class="btn sm ghost" onclick="testC('${name}')">test</button></div>
+        <div id=msg-${name} class=muted></div>`}
+      </div>`).join('');
   };
   window.saveC = async (name) => {
     const r = await fetch('/api/collectors',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,token:document.getElementById('tok-'+name).value,account_id:document.getElementById('acc-'+name).value})});
     const j = await r.json();
     document.getElementById('msg-'+name).textContent = r.ok ? 'saved' : (j.error||'save failed');
-    if(r.ok) loadPlatforms();
+    if(r.ok) draw();
   };
   window.testC = async (name) => {
     const m = document.getElementById('msg-'+name); m.textContent = 'testing…';
@@ -208,18 +220,5 @@ else if(page==='reporting'){
     const j = await r.json();
     m.textContent = j.ok ? `live ✓ ${j.account_name||''}` : (j.error||'test failed');
   };
-  window.pull = async () => {
-    out.innerHTML = Array(4).fill('<div class=skeleton></div>').join('');
-    const r = await fetch('/api/report/all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preset:preset.value})});
-    const j = await r.json();
-    if(!r.ok){ out.innerHTML = `<div class=card><p>${esc(j.error)}</p></div>`; return; }
-    out.innerHTML = (j.errors||[]).map(e=>`<div class=card><p>${esc(e.collector)}: ${esc(e.error)}</p></div>`).join('') + (j.rows.length ? table(j.rows) : '<div class=card><p>no campaign rows for this period</p></div>');
-  };
-  window.up = async () => {
-    const fd = new FormData(); fd.append('file', csv.files[0]);
-    out.innerHTML = Array(4).fill('<div class=skeleton></div>').join('');
-    const rows = await (await fetch('/api/report/upload',{method:'POST',body:fd})).json();
-    out.innerHTML = Array.isArray(rows) ? table(rows.map(r=>({platform:'csv',...r}))) : `<div class=card><p>${esc(rows.error||'upload failed')}</p></div>`;
-  };
-  loadPlatforms();
+  draw();
 }

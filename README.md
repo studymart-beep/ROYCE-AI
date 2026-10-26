@@ -19,13 +19,13 @@ Meta Ads (Marketing API v21):
 2. Assign your ad account to that system user with at least view/analyze permission.
 3. Click Generate token, pick your app, and tick `ads_read` (plus `business_management` if you use it). Copy the token.
 4. The account id is the ad account number shown in Ads Manager, without the `act_` prefix.
-5. Paste both on the reporting page under "connected platforms", then press test.
+5. Paste both on the connectors page, then press test.
 
 TikTok Ads (TikTok Business API v1.3):
 1. Create a developer app at TikTok for Business (business-api.tiktok.com developer portal) and get it approved for the Marketing API.
 2. Grant the Reporting (read) scope, then authorize it against your advertiser account to get an access token.
 3. The advertiser id is your TikTok Ads Manager advertiser id.
-4. Paste both on the reporting page, then test.
+4. Paste both on the connectors page, then test.
 
 Google Ads: coming. It needs an OAuth client (client id, secret, and refresh token) plus a Google Ads developer token. The collector is a stub that refuses with a clear "connect via OAuth first" message until that is built, so it never returns fake data.
 
@@ -39,3 +39,7 @@ API routes:
 Presets: last_7d (default), last_14d, last_30d, yesterday, today, this_month (TikTok only supports explicit dates; the collector maps these).
 
 Telegram: ask for a report or campaign performance, and the bot pulls the rows from every configured collector, then has the LLM write a client-ready summary from those real numbers. If nothing is connected, it tells you which token to add.
+
+## Mini app (v5, view-first)
+
+The mini app is read-only: Generated work (every ad package, newest first, stored in work.json), CRM leads, the campaign report, and connectors. You do the work by telling Royce in the chat. Each generated package is recorded in work.json via GET /api/work.
