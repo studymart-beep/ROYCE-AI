@@ -78,6 +78,8 @@ def _send_into(chat_id, text):
 
 from . import tgsend as _tgsend_boot
 _tgsend_boot.set_sender(_send_into)
+from . import tgprecautions as _tgprec_boot
+_tgprec_boot.set_api(lambda method, **params: api(method, **params))
 
 
 def send(chat_id, text):

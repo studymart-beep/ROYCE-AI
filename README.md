@@ -196,3 +196,10 @@ was added as an admin. Earlier posts cannot be read.
 Owner sends: in your private chat with the bot, say "tell the group <name>: <text>" or "post to the channel <name>: <text>".
 The bot shows the exact text and waits for /approve <id>. Only the owner can queue or approve. Nothing is posted until you approve,
 and the audit log records the target id and outcome, never the text.
+
+Deletion precautions (off by default): /precautions on|off, admin only. When on, a flagged suspicious link is queued for your
+approval in your private chat with the bot. Nothing is deleted or restricted until you send /approve <id> there.
+Setting it off or taking no action leaves flagged links review-only.
+
+Rules: an admin sets the group rules with /setrules <text> (up to 2000 characters). Members read them with /rules.
+The rules text is included in the recap context so summaries can flag rule-breaking talk. It does not change how flags are raised.

@@ -19,6 +19,7 @@ import time
 from . import tgstore, tgwelcomes, tgmod, tgallow, tgadmin
 from .llm import chat_text
 from .style import sanitize
+from . import tgprecautions, tgrules
 from .agent import audit
 
 GROUP_TYPES = ("group", "supergroup", "channel")  # channel posts are stored like group text
@@ -94,6 +95,11 @@ def _run_moderation(msg, edited, api, owner_id):
         flag_id, created = tgmod.record(gid, mid, uid, category, reason, ts=ts)
         if created:
             audit.record("bot", "group_flag_created", f"group={gid} category={category}", f"flag={flag_id}")
+            if category == "link_suspicious" and owner_id:
+                try:
+                    tgprecautions.queue_for_flag(owner_id, gid, chat.get("title") or "", mid, uid, flag_id)
+                except Exception as e:
+                    print(f"[bot] precaution queue failed: {e}", flush=True)
 
 
 def _welcome(msg, send):
@@ -224,6 +230,28 @@ def handle_groupconfig(chat_id, send):
         f"pending flags: {pending}"))
 
 
+def handle_precautions(chat_id, arg, send):
+    a = (arg or "").strip().lower()
+    if a not in ("on", "off"):
+        send(chat_id, "usage: /precautions on|off (admin only; default off)")
+        return
+    tgprecautions.set_on(chat_id, a == "on")
+    audit.record("group", "precautions_set", f"group={chat_id}", a)
+    send(chat_id, "precautions " + a + ". " + (
+        "flagged links will be queued for your approval in your dm, nothing is deleted without your yes."
+        if a == "on" else "flagged links stay review-only."))
+
+
+def handle_setrules(chat_id, arg, send):
+    text = (arg or "").strip()
+    if not text:
+        send(chat_id, "usage: /setrules <rules text>")
+        return
+    tgrules.set_rules(chat_id, text)
+    audit.record("group", "rules_set", f"group={chat_id}", f"len={len(text)}")
+    send(chat_id, "rules saved. members can see them with /rules.")
+
+
 def handle_flags(chat_id, send):
     items = [f for f in tgmod.list_flags(status="pending", limit=100) if f["group_id"] == chat_id][:10]
     if not items:
@@ -338,8 +366,10 @@ def handle_group_update(msg, edited, send, api, owner_id=None, now=None):
         send(gid, HELP_GROUP)
     elif cmd == "/deletemydata":
         handle_deletemydata(gid, uid, arg, send, private=False)
+    elif cmd == "/rules":
+        send(gid, tgrules.get(gid) or "no rules set for this group yet. an admin can /setrules <text>.")
     elif cmd in ("/setwelcome", "/welcome", "/welcomestatus", "/setretention", "/groupconfig",
-                 "/flags", "/flag", "/allowadd", "/allowremove"):
+                 "/flags", "/flag", "/allowadd", "/allowremove", "/precautions", "/setrules"):
         if not admin():
             _refuse(gid, cmd, uid, send)
             return True
@@ -352,6 +382,8 @@ def handle_group_update(msg, edited, send, api, owner_id=None, now=None):
         elif cmd == "/flag": handle_flag(gid, arg, send)
         elif cmd == "/allowadd": handle_allow(gid, arg, send, add=True)
         elif cmd == "/allowremove": handle_allow(gid, arg, send, add=False)
+        elif cmd == "/precautions": handle_precautions(gid, arg, send)
+        elif cmd == "/setrules": handle_setrules(gid, arg, send)
     return True
 
 
