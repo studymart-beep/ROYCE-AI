@@ -35,6 +35,7 @@ def require_owner(authorization: str = Header(default=""), x_workspace_token: st
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE)
     conversation_id: str | None = None
+    bot_id: str | None = Field(default=None, max_length=40)
 
 
 def _llm_chat(msgs, **kw):
@@ -77,6 +78,9 @@ def chat(body: ChatIn):
     if not text:
         raise HTTPException(400, "empty message")
     history = conversations.history(body.conversation_id)
+    bot = _active_bot(body.bot_id)
+    if bot is not None:
+        return _bot_chat(body, text, history, bot)
     token = budget.bind(WEB_BUCKET)
     try:
         task_id = None
@@ -101,6 +105,41 @@ def chat(body: ChatIn):
         budget.unbind(token)
     conv = conversations.append_exchange(body.conversation_id, text, reply, task_id=task_id)
     return {"conversation_id": conv["id"], "reply": reply, "task_id": task_id, "status": status}
+
+
+def _active_bot(bot_id):
+    """The bot the owner picked for this message, or None for the plain Royce chat. Unknown ids are a 404."""
+    if not bot_id:
+        return None
+    from . import bots
+    bot = bots.get(bot_id)
+    if bot is None:
+        raise HTTPException(404, "no such bot")
+    return bot
+
+
+def _bot_chat(body, text, history, bot):
+    """Chat through a bot. The Chief of Staff routes to specialists; a specialist answers with its own playbook."""
+    from . import bots, chief
+    from .llm import chat_text
+    token = budget.bind(WEB_BUCKET)
+    try:
+        if bots.is_coordinator(bot):
+            res = chief.run(text, history, bot, chat=lambda m, **kw: chat_text(m, **kw), sanitize=_sanitize)
+            reply, status, delegations = res["reply"], res["status"], res["delegations"]
+        else:
+            reply = _sanitize(chief._direct(bot, text, history, lambda m, **kw: chat_text(m, **kw)))
+            status, delegations = "completed", []
+    except budget.BudgetExceeded as e:
+        raise HTTPException(429, {"error": "budget", "message": str(e), "retry_after": e.retry_after})
+    except RuntimeError as e:
+        raise HTTPException(503, {"error": "provider", "message": str(e)[:300]})
+    finally:
+        budget.unbind(token)
+    meta = {"bot_id": bot["id"], "bot_name": bot["name"], "delegations": delegations} if delegations else {"bot_id": bot["id"], "bot_name": bot["name"]}
+    conv = conversations.append_exchange(body.conversation_id, text, reply, meta=meta)
+    return {"conversation_id": conv["id"], "reply": reply, "task_id": None, "status": status,
+            "bot": {"id": bot["id"], "name": bot["name"]}, "delegations": delegations}
 
 
 @router.get("/conversations", dependencies=[Depends(require_owner)])
@@ -249,7 +288,16 @@ def bot_templates():
 @router.get("/bots", dependencies=[Depends(require_owner)])
 def list_bots():
     from . import bots
+    bots.ensure_coordinator()  # seeds the Chief of Staff once, idempotent
     return {"bots": bots.list_bots()}
+
+
+@router.get("/bots/chief", dependencies=[Depends(require_owner)])
+def chief_bot():
+    """The Chief of Staff. Created on first call if missing, never duplicated."""
+    from . import bots
+    bot = bots.ensure_coordinator()
+    return bot
 
 
 @router.post("/bots", dependencies=[Depends(require_owner)])
@@ -266,8 +314,11 @@ def create_bot(body: BotIn):
 @router.delete("/bots/{bot_id}", dependencies=[Depends(require_owner)])
 def delete_bot(bot_id: str):
     from . import bots
-    if not bots.delete(bot_id):
-        raise HTTPException(404, "no such bot")
+    try:
+        if not bots.delete(bot_id):
+            raise HTTPException(404, "no such bot")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     audit.record("owner", "bot_deleted", bot_id, "ok")
     return {"ok": True}
 

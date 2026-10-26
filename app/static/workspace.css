@@ -130,3 +130,11 @@ textarea.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px
   .account{display:none}
   .page-body{padding:16px}
 }
+
+/* Chief of Staff: css overlay on the mascot, logo file untouched */
+.bot-av{position:relative;display:inline-block;flex:none}
+.bot-av img{width:40px;height:40px;border-radius:10px;object-fit:cover;display:block}
+.bot-av .crown{position:absolute;top:-6px;right:-6px;font-size:13px;line-height:1;color:#c9a46a;text-shadow:0 0 4px #000}
+.bot-pick{display:inline-flex;align-items:center;gap:6px;margin-bottom:6px}
+.bot-pick select{background:var(--panel-2);color:inherit;border:1px solid var(--line,#333);border-radius:8px;padding:3px 6px}
+.delegated{margin:4px 0 2px 2px}

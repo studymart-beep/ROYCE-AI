@@ -145,7 +145,7 @@
         const item = el("button", "side-item");
         item.type = "button";
         item.appendChild(el("span", "t", b.name));
-        item.appendChild(el("span", "s", b.template ? "template: " + b.template : "custom"));
+        item.appendChild(el("span", "s", b.template === "coordinator" ? "coordinates all bots" : (b.template ? "template: " + b.template : "custom")));
         item.addEventListener("click", () => { state.selectedBot = b.id; renderBots(); });
         list.appendChild(item);
       });
@@ -219,11 +219,16 @@
     img.src = "/static/mascot.png";
     img.alt = "";
     row.appendChild(img);
+    const av = el("span", "bot-av");
+    av.appendChild(img);
+    if (b.template === "coordinator") av.appendChild(el("span", "crown", "\u2605"));
+    row.replaceChild(av, img);
     const txt = el("div");
     txt.appendChild(el("div", "n", b.name));
-    txt.appendChild(el("div", "d", b.template ? "pins the " + b.template + " playbook" : "custom persona"));
+    txt.appendChild(el("div", "d", b.template === "coordinator" ? "coordinates all bots" : (b.template ? "pins the " + b.template + " playbook" : "custom persona")));
     row.appendChild(txt);
     card.appendChild(row);
+    if (b.template === "coordinator") { return card; }
     const del = btn("Delete", "danger small", async () => {
       if (!window.confirm("Delete bot " + b.name + "?")) return;
       try { await api("DELETE", "/bots/" + encodeURIComponent(b.id)); toast("bot deleted"); renderBots(); sideBots(); }
@@ -370,6 +375,7 @@
     wrap.appendChild(errSlot);
     const compose = buildComposer();
     wrap.appendChild(compose);
+    botSelector().then((sel) => compose.insertBefore(sel, compose.firstChild));
     body.appendChild(wrap);
     if (state.convId) {
       try {
@@ -393,6 +399,10 @@
     }
     msgs.forEach((m) => {
       const role = m.role === "user" ? "user" : "assistant";
+      if (role === "assistant" && m.meta && m.meta.delegations) {
+        const dl = delegationLine(m.meta.delegations);
+        if (dl) scroll.appendChild(dl);
+      }
       const b = el("div", "bubble " + role, m.content || m.text || "");
       scroll.appendChild(b);
     });
@@ -435,6 +445,38 @@
     });
     return box;
   }
+  async function ensureChief() {
+    try { const c = await api("GET", "/bots/chief"); return c.id; } catch (e) { return null; }
+  }
+  async function botSelector() {
+    const wrap = el("label", "bot-pick");
+    wrap.appendChild(el("span", "muted small", "bot "));
+    const sel = document.createElement("select");
+    sel.id = "botPick";
+    sel.setAttribute("aria-label", "active bot");
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = "plain chat";
+    sel.appendChild(none);
+    try {
+      const d = await api("GET", "/bots");
+      d.bots.forEach((b) => {
+        const o = document.createElement("option");
+        o.value = b.id; o.textContent = b.name + (b.template === "coordinator" ? " (coordinates all bots)" : "");
+        sel.appendChild(o);
+      });
+    } catch (e) { /* selector stays on plain chat */ }
+    const chiefId = await ensureChief();
+    if (chiefId && !state.selectedBot) state.selectedBot = chiefId;
+    if (state.selectedBot) sel.value = state.selectedBot;
+    sel.addEventListener("change", () => { state.selectedBot = sel.value || null; });
+    wrap.appendChild(sel);
+    return wrap;
+  }
+  function delegationLine(delegations) {
+    const names = (delegations || []).filter((d) => d.status === "completed").map((d) => d.bot_name);
+    if (!names.length) return null;
+    return el("div", "delegated muted small", "delegated to " + names.join(", "));
+  }
   async function sendMessage(text, ta, send) {
     const scroll = $("chatScroll");
     const errSlot = clear($("chatErr"));
@@ -443,8 +485,10 @@
     ta.value = "";
     send.disabled = true;
     try {
-      const res = await api("POST", "/chat", { message: text, conversation_id: state.convId });
+      const res = await api("POST", "/chat", { message: text, conversation_id: state.convId, bot_id: state.selectedBot || null });
       state.convId = res.conversation_id;
+      const dl = delegationLine(res.delegations);
+      if (dl) scroll.appendChild(dl);
       scroll.appendChild(el("div", "bubble assistant", res.reply || ""));
       scroll.scrollTop = scroll.scrollHeight;
       loadConvs();
