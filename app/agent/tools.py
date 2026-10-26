@@ -14,6 +14,7 @@ Tools:
   health_check     GET /healthz on a local port (default 8000)
 """
 import datetime
+import json
 import os
 import re
 import shutil
@@ -160,10 +161,51 @@ REGISTRY = {
 }
 
 
-def run(name, args=None, actor="tool"):
-    """Run a registered tool by name. Unknown names and unknown argument keys are refused."""
+TOGGLE_PATH = os.path.join(DATA_DIR, "tools_config.json")
+
+
+def _toggles(path=None):
+    try:
+        with open(path or TOGGLE_PATH) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def enabled(name, path=None):
+    """Every registered tool is on unless the owner switched it off in tools_config.json."""
+    return bool(_toggles(path).get(name, {}).get("enabled", True))
+
+
+def set_enabled(name, on, path=None):
+    """Persist the owner's on/off choice for one tool. Refuses names that are not registered."""
     if name not in REGISTRY:
         raise ToolError(f"unknown tool '{name}'")
+    p = path or TOGGLE_PATH
+    d = _toggles(p)
+    d.setdefault(name, {})["enabled"] = bool(on)
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=2)
+    os.replace(tmp, p)
+    return bool(on)
+
+
+def describe():
+    """One row per registered tool, with its argument names and its on/off state."""
+    return [{"name": n, "args": list(allowed), "enabled": enabled(n)} for n, (_fn, allowed) in REGISTRY.items()]
+
+
+def run(name, args=None, actor="tool"):
+    """Run a registered tool by name. Unknown names and unknown argument keys are refused.
+    A tool the owner switched off is refused before anything runs."""
+    if name not in REGISTRY:
+        raise ToolError(f"unknown tool '{name}'")
+    if not enabled(name):
+        audit.record(actor, f"tool:{name}", "", "refused: switched off")
+        raise ToolError(f"tool '{name}' is switched off in the workspace")
     fn, allowed = REGISTRY[name]
     args = args or {}
     if not isinstance(args, dict):

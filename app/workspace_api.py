@@ -302,3 +302,122 @@ def delete_routine(rid: str):
         raise HTTPException(404, "no such routine")
     audit.record("owner", "routine_deleted", rid, "ok")
     return {"ok": True}
+
+
+# --- library: tools, skills, messaging, connectors, work, settings (owner-gated) -------------------
+
+class ToolToggleIn(BaseModel):
+    enabled: bool
+
+
+@router.get("/tools", dependencies=[Depends(require_owner)])
+def list_tools():
+    from .agent import tools
+    return {"tools": tools.describe()}
+
+
+@router.put("/tools/{name}", dependencies=[Depends(require_owner)])
+def toggle_tool(name: str, body: ToolToggleIn):
+    from .agent import tools
+    try:
+        on = tools.set_enabled(name, body.enabled)
+    except tools.ToolError:
+        raise HTTPException(404, "no such tool")
+    audit.record("owner", "tool_toggled", f"{name}={'on' if on else 'off'}", "ok")
+    return {"name": name, "enabled": on}
+
+
+@router.get("/skills", dependencies=[Depends(require_owner)])
+def list_skills_route():
+    from . import skills
+    return {"skills": skills.list_skills()}
+
+
+class SkillIn(BaseModel):
+    body: str = Field(min_length=1, max_length=20000)
+    description: str = Field(default="", max_length=300)
+
+
+@router.get("/skills/{name}", dependencies=[Depends(require_owner)])
+def get_skill_route(name: str):
+    from . import skills
+    body = skills.get_skill(name)
+    if body is None:
+        raise HTTPException(404, "no such skill")
+    meta = next((s for s in skills.list_skills() if s["name"] == name), {"name": name, "description": ""})
+    return {"name": name, "description": meta.get("description", ""), "body": body}
+
+
+@router.put("/skills/{name}", dependencies=[Depends(require_owner)])
+def save_skill_route(name: str, body: SkillIn):
+    from . import skills
+    try:
+        saved = skills.save_skill(name, body.body, body.description)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    audit.record("owner", "skill_saved", saved, "ok")
+    return {"name": saved}
+
+
+@router.get("/messaging", dependencies=[Depends(require_owner)])
+def list_messaging():
+    from . import tgstore, tgprecautions
+    chats = []
+    for gid, title, ctype in tgstore.known_chats():
+        chats.append({"group_id": str(gid), "title": title, "type": ctype,
+                      "messages": tgstore.count(gid),
+                      "precautions_on": tgprecautions.is_on(gid)})
+    return {"chats": chats}
+
+
+class MessagingToggleIn(BaseModel):
+    precautions_on: bool
+
+
+@router.put("/messaging/{group_id}", dependencies=[Depends(require_owner)])
+def toggle_messaging(group_id: str, body: MessagingToggleIn):
+    from . import tgstore, tgprecautions
+    known = {str(g) for g, _t, _c in tgstore.known_chats()}
+    if group_id not in known:
+        raise HTTPException(404, "no such chat")
+    on = tgprecautions.set_on(group_id, body.precautions_on)
+    audit.record("owner", "precautions_toggled", f"{group_id}={'on' if on else 'off'}", "ok")
+    return {"group_id": group_id, "precautions_on": on}
+
+
+@router.get("/connectors", dependencies=[Depends(require_owner)])
+def list_connectors():
+    from . import collectors
+    out = []
+    for name, row in collectors.status().items():
+        out.append({"name": name, "label": row.get("label"), "configured": bool(row.get("configured")),
+                    "account_label": row.get("account_label") or "", "is_ads": bool(row.get("is_ads"))})
+    return {"connectors": out}
+
+
+@router.get("/work", dependencies=[Depends(require_owner)])
+def list_work_route():
+    from . import workstore
+    return {"items": workstore.list_work()}
+
+
+@router.get("/usage", dependencies=[Depends(require_owner)])
+def usage():
+    return {"bucket": WEB_BUCKET, "used_this_hour": budget.used(WEB_BUCKET),
+            "remaining_this_hour": budget.remaining(WEB_BUCKET)}
+
+
+class DefaultProviderIn(BaseModel):
+    provider: str = Field(min_length=1, max_length=20)
+
+
+@router.put("/settings/default-provider", dependencies=[Depends(require_owner)])
+def set_default_provider(body: DefaultProviderIn):
+    from .config import PROVIDERS, load_settings, save_settings
+    if body.provider not in PROVIDERS:
+        raise HTTPException(400, "unknown provider")
+    s = load_settings()
+    s["default_provider"] = body.provider
+    save_settings(s)
+    audit.record("owner", "default_provider_set", body.provider, "ok")
+    return {"default_provider": body.provider}

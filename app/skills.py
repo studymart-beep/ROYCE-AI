@@ -78,6 +78,27 @@ def list_skills():
     return out
 
 
+def save_skill(name, body, description=""):
+    """Write skills/<name>.md with a front matter block. The name must be a plain slug, the file is
+    written atomically, and the body is the playbook text. Returns the saved name."""
+    key = (name or "").strip().lower()
+    p = _path(key)
+    if not p:
+        raise ValueError("skill names use lowercase letters, digits and dashes only")
+    if not os.path.isfile(p):
+        raise ValueError("no such skill; only existing playbooks can be edited here")
+    desc = " ".join((description or "").split())
+    text = "---\nname: " + key + "\n"
+    if desc:
+        text += "description: " + desc + "\n"
+    text += "---\n" + (body or "").strip() + "\n"
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, p)
+    return key
+
+
 def get_skill(name):
     """Return the playbook body for a skill name, or None if it does not exist."""
     p = _path((name or "").strip().lower())
