@@ -405,7 +405,7 @@ def handle_update(u):
     from . import tggroups as _tg
     from . import tgsend as _ts
     sender_id = (msg.get("from") or {}).get("id")
-    # telegram is ops only: all ai chat lives in the desktop app and the pwa
+    # telegram is ops only: all ai chat lives in the web app (/workspace and /m)
     if sender_id != leadbrain.OWNER_CHAT_ID:
         send(chat["id"], PRIVATE_POINTER)
         audit.record("user", "private_pointer", "non_owner", "ok")
@@ -428,9 +428,9 @@ def handle_update(u):
     finally:
         budget.unbind(token)
 
-PRIVATE_POINTER = "all ai chat lives in the desktop app or pwa. im on telegram for group ops and alerts only"
+PRIVATE_POINTER = "all ai chat lives in the web app: https://royce-ai.onrender.com/workspace (phone: /m). im on telegram for group ops and alerts only"
 PRIVATE_OPS_HELP = (
-    "royce ops on telegram. chat with me in the desktop app or the pwa.\n"
+    "royce ops on telegram. chat with me in the web app: https://royce-ai.onrender.com/workspace (phone: /m).\n"
     "/start this list\n"
     "/leads view leads\n"
     "/addlead Name | Business | Contact\n"
@@ -464,7 +464,7 @@ def _handle_private_ops(chat_id, text):
     elif text == "/health": send(chat_id, jobs.format_status())
     elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
     elif text == "/deny" or text.startswith("/deny "): handle_deny(chat_id, text[5:])
-    elif text.startswith("/"): send(chat_id, "unknown command. ops commands are in /start. chat with me in the desktop app or the pwa.")
+    elif text.startswith("/"): send(chat_id, "unknown command. ops commands are in /start. chat with me in the web app: https://royce-ai.onrender.com/workspace (phone: /m).")
     else: send(chat_id, PRIVATE_POINTER)
 
 def _on_signal(signum, frame):

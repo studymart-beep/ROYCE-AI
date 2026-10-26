@@ -7,7 +7,7 @@ from app import leadbrain
 
 
 OWNER = leadbrain.OWNER_CHAT_ID
-POINTER = "all ai chat lives in the desktop app or pwa. im on telegram for group ops and alerts only"
+POINTER = "all ai chat lives in the web app: https://royce-ai.onrender.com/workspace (phone: /m). im on telegram for group ops and alerts only"
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def test_owner_script_in_private_is_unknown_not_a_generator(sent, monkeypatch):
     cid, text = sent[0]
     assert cid == OWNER
     assert "unknown command" in text
-    assert "desktop app" in text
+    assert "web app" in text
 
 
 def test_owner_generators_are_gone_in_private(sent):
