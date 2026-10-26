@@ -36,14 +36,19 @@ def _title(text):
     return t if len(t) <= TITLE_MAX else t[: TITLE_MAX - 3].rstrip() + "..."
 
 
-def append_exchange(conv_id, user_text, reply, task_id=None, meta=None):
-    """Store one completed exchange. Creates the conversation when conv_id is None or unknown."""
+def append_exchange(conv_id, user_text, reply, task_id=None, meta=None, bot_id=None):
+    """Store one completed exchange. Creates the conversation when conv_id is None or unknown.
+
+    bot_id binds a new conversation to one bot (null for plain chat and for legacy rows).
+    An existing conversation keeps its own bot_id: a message sent to another bot starts a new one.
+    """
     now = time.time()
     with _LOCK:
         d = _load()
-        if not conv_id or conv_id not in d:
+        if not conv_id or conv_id not in d or (d[conv_id].get("bot_id") or None) != (bot_id or None):
             conv_id = uuid.uuid4().hex[:12]
-            d[conv_id] = {"id": conv_id, "title": _title(user_text), "created_at": now, "updated_at": now, "messages": []}
+            d[conv_id] = {"id": conv_id, "title": _title(user_text), "created_at": now, "updated_at": now,
+                          "bot_id": bot_id or None, "messages": []}
         conv = d[conv_id]
         conv["messages"].append({"role": "user", "text": user_text, "ts": now})
         assistant = {"role": "assistant", "text": reply, "ts": now}
@@ -71,17 +76,24 @@ def history(conv_id, limit=20):
     return [{"role": m["role"], "content": m["text"]} for m in conv["messages"][-limit:]]
 
 
-def list_all(q=None):
-    """Summaries newest first. q filters by title or any message text (case-insensitive substring)."""
+def list_all(q=None, bot_id=None, scope_all=False):
+    """Summaries newest first. q filters by title or any message text (case-insensitive substring).
+
+    bot_id limits the list to that bot's conversations. Without bot_id only plain chats are listed
+    (legacy rows without a bot_id count as plain chats); scope_all=True lists every conversation.
+    """
     with _LOCK:
         d = _load()
     needle = (q or "").strip().lower()
     out = []
     for c in d.values():
+        if not scope_all and (c.get("bot_id") or None) != (bot_id or None):
+            continue
         if needle:
             hay = (c.get("title", "") + "\n" + "\n".join(m.get("text", "") for m in c.get("messages", []))).lower()
             if needle not in hay:
                 continue
         out.append({"id": c["id"], "title": c.get("title", ""), "created_at": c.get("created_at"),
-                    "updated_at": c.get("updated_at"), "message_count": len(c.get("messages", []))})
+                    "updated_at": c.get("updated_at"), "message_count": len(c.get("messages", [])),
+                    "bot_id": c.get("bot_id")})
     return sorted(out, key=lambda c: c.get("updated_at") or 0, reverse=True)

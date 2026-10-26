@@ -123,14 +123,14 @@ def _bot_chat(body, text, history, bot):
     finally:
         budget.unbind(token)
     meta = {"bot_id": bot["id"], "bot_name": bot["name"], "delegations": delegations} if delegations else {"bot_id": bot["id"], "bot_name": bot["name"]}
-    conv = conversations.append_exchange(body.conversation_id, text, reply, meta=meta)
+    conv = conversations.append_exchange(body.conversation_id, text, reply, meta=meta, bot_id=bot["id"])
     return {"conversation_id": conv["id"], "reply": reply, "task_id": None, "status": status,
             "bot": {"id": bot["id"], "name": bot["name"]}, "delegations": delegations}
 
 
 @router.get("/conversations")
-def list_conversations(q: str | None = Query(default=None, max_length=200)):
-    return conversations.list_all(q)
+def list_conversations(q: str | None = Query(default=None, max_length=200), bot_id: str | None = Query(default=None, max_length=40)):
+    return conversations.list_all(q, bot_id=bot_id)
 
 
 @router.get("/conversations/{cid}")
@@ -281,6 +281,17 @@ def list_bots():
     from . import bots
     bots.ensure_coordinator()  # seeds the Chief of Staff once, idempotent
     return {"bots": bots.list_bots()}
+
+
+@router.get("/bots/{bot_id}/persona")
+def bot_persona(bot_id: str):
+    """The prompt text this bot chats with: its name plus the pinned playbook body, read live."""
+    from . import bots
+    bot = bots.get(bot_id)
+    if not bot:
+        raise HTTPException(404, "no such bot")
+    return {"bot_id": bot["id"], "name": bot["name"], "template": bot.get("template"),
+            "persona": bots.persona_block(bot)}
 
 
 @router.get("/bots/chief")

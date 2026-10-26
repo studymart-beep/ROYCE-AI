@@ -213,3 +213,18 @@ def test_status_shape_and_no_keys(client, monkeypatch):
     assert set(body["providers"]) >= {"gemini", "openrouter"}
     assert "budget" in body and "used_this_hour" in body["budget"]
     assert "AIzaSECRET" not in r.text
+
+
+def test_chat_passes_bot_id_and_scopes_sessions_per_bot(client, monkeypatch, tmp_path):
+    from app import bots
+    monkeypatch.setattr(bots, "PATH", str(tmp_path / "bots.json"))
+    _no_llm(monkeypatch)
+    a = bots.create("Lagos writer")
+    b = bots.create("Hook bot")
+    r = client.post("/api/ws/chat", json={"message": "hi bot", "bot_id": a["id"]})
+    assert r.status_code == 200, r.text
+    conv_id = r.json()["conversation_id"]
+    listed = client.get("/api/ws/conversations", params={"bot_id": a["id"]}).json()
+    assert [c["id"] for c in listed] == [conv_id]
+    assert client.get("/api/ws/conversations").json() == []
+    assert client.get("/api/ws/conversations", params={"bot_id": b["id"]}).json() == []
