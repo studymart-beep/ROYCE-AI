@@ -146,17 +146,27 @@ else if(page==='connectors'){
   const help = {
     meta: 'system user token, ads_read permission',
     tiktok: 'access token, reporting read scope',
+    gmail: 'app password, read-only inbox',
+    facebook: 'page token. insights coming soon',
+    x: 'bearer token. insights coming soon',
+    instagram: 'graph api token. insights coming soon',
+    linkedin: 'api token. insights coming soon',
   };
   const full = {
     meta: 'System user token from Meta Business Settings > Users > System users > Generate token (ads_read permission). account id is the ad account number without act_.',
     tiktok: 'Access token from your TikTok for Business developer app (Reporting read scope), plus your TikTok Ads Manager advertiser id.',
+    gmail: 'Google Account > Security > 2-Step Verification > App passwords. Create one called Royce AI and paste the 16 characters as the app password, with your gmail address. Royce reads your inbox only.',
+    facebook: 'Facebook Page or Meta Graph token. Saved now so it shows as connected. Live insights are coming soon, so no data is pulled yet.',
+    x: 'X API bearer token from the developer portal. Saved now. Live insights are coming soon.',
+    instagram: 'Instagram Graph API token for your business account. Saved now. Live insights are coming soon.',
+    linkedin: 'LinkedIn API token. Saved now. Live insights are coming soon.',
   };
-  const icons = {meta:'Ⓜ', tiktok:'♪', google:'G'};
+  const icons = {meta:'Ⓜ', tiktok:'♪', google:'G', gmail:'✉', facebook:'f', x:'𝕏', instagram:'◎', linkedin:'in'};
   const draw = async () => {
     const st = await (await fetch('/api/collectors')).json();
     document.getElementById('conns').innerHTML = Object.entries(st).map(([name,c])=>{
       const isGoogle = name==='google';
-      const sub = isGoogle ? 'needs oauth' : (c.configured ? `account ${c.account_id}` : (help[name]||c.token_help||''));
+      const sub = isGoogle ? 'needs oauth' : (c.configured ? (c.account_id ? `account ${c.account_id}` : 'token saved') : (help[name]||c.token_help||''));
       const right = isGoogle
         ? '<span class="status soon">coming soon</span>'
         : (c.configured ? '<span class="status on"><span class=dot></span>connected</span>' : '<button class=connect type=button>connect</button>');
@@ -168,7 +178,7 @@ else if(page==='connectors'){
       const body = isGoogle ? '' : `
         <div class=fields id=fx-${name} hidden>
           <div class=sub style="margin:2px 0 8px">${esc(full[name]||c.token_help||'')}</div>
-          <input id=tok-${name} placeholder="access token" type=password autocomplete=off>
+          <input id=tok-${name} placeholder="${esc(c.token_label||'access token')}" type=password autocomplete=off>
           <input id=acc-${name} placeholder="${esc(c.account_label)}" autocomplete=off>
           <div class=actions>
             <button class="pill dark sm" type=button onclick="saveC('${name}')">save</button>

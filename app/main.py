@@ -112,4 +112,11 @@ async def api_report_all(req: Request):
         return JSONResponse({"error": "no collectors configured", "configured": []}, status_code=400)
     return {"preset": preset, "rows": rows, "errors": errors, "configured": collectors.configured_names()}
 
+@app.get("/api/gmail/summary")
+def api_gmail_summary(days: int = 7):
+    try:
+        return collectors.get("gmail").summary(days=max(1, min(days, 60)))
+    except collectors.CollectorError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

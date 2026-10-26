@@ -1,5 +1,6 @@
 import json, os, re, time, urllib.request, urllib.parse
-from .llm import chat_text, generate_script_package
+from .llm import chat_text, chat_vision, generate_script_package
+from . import imagegen
 from . import db, collectors, workstore, tasks
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,6 +16,39 @@ def api(method, **params):
                                  data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=70) as r:
         return json.loads(r.read())
+
+def send_photo(chat_id, data, caption=""):
+    """Upload raw image bytes to Telegram (multipart/form-data)."""
+    boundary = "----royce" + os.urandom(8).hex()
+    parts = []
+    def field(name, value):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    field("chat_id", str(chat_id))
+    if caption:
+        field("caption", caption[:1000])
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="royce.png"\r\nContent-Type: image/png\r\n\r\n'.encode())
+    parts.append(data)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    body = b"".join(parts)
+    req = urllib.request.Request(f"https://api.telegram.org/bot{TOKEN}/sendPhoto", data=body,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=70) as r:
+        return json.loads(r.read())
+
+def download_photo(msg):
+    """Largest size of a Telegram photo message, returned as (bytes, mime)."""
+    sizes = msg.get("photo") or []
+    if not sizes:
+        return None
+    best = max(sizes, key=lambda p: p.get("file_size", 0) or p.get("width", 0) * p.get("height", 0))
+    info = api("getFile", file_id=best["file_id"])
+    path = (info.get("result") or {}).get("file_path")
+    if not path:
+        raise RuntimeError("telegram returned no file path for the photo")
+    with urllib.request.urlopen(f"https://api.telegram.org/file/bot{TOKEN}/{path}", timeout=70) as r:
+        data = r.read()
+    mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+    return data, mime
 
 def send(chat_id, text):
     text = text.strip() or "(empty)"
@@ -92,6 +126,64 @@ def _check_passes(check):
         return bool(collectors.configured_names())
     return False
 
+def handle_image(chat_id, prompt):
+    if not prompt:
+        send(chat_id, "usage: /image a neon-lit earbud on a dark bronze background, product shot")
+        return
+    t = tasks.add_task(chat_id, prompt, status="open", check={"type": "retry", "action": "image", "prompt": prompt, "attempts": 0})
+    send(chat_id, "generating that now")
+    api("sendChatAction", chat_id=chat_id, action="upload_photo")
+    try:
+        run_task(t)
+    except imagegen.ImageError as e:
+        reason = str(e)
+        tasks.mark_unavailable(t["id"], note=reason, check={"type": "retry", "action": "image", "prompt": prompt, "attempts": 1})
+        send(chat_id, f"{reason}\nkept it on my list, i'll retry and send it when it works ✅")
+        return
+    tasks.complete_task(t["id"], note="done")
+
+def handle_photo(chat_id, msg, caption):
+    """Describe or analyze a photo. A caption with the photo is treated as the request ('make an ad like this')."""
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    got = download_photo(msg)
+    if not got:
+        send(chat_id, "couldn't read that photo, try sending it again")
+        return
+    data, mime = got
+    ask = caption or "describe this image in a few sentences: what's in it, how it looks, and what it could be used for in an ad."
+    if caption:
+        ask = (f"The user sent this photo with the request: \"{caption}\". "
+               "Use the photo for it. If they want an ad, script or creative based on it, do that using what you see.")
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
+    try:
+        reply = chat_vision([{"role": "system", "content": sysmsg}, {"role": "user", "content": ask}], data, mime=mime)
+    except Exception as e:
+        print(f"[bot] vision error: {e}", flush=True)
+        send(chat_id, f"couldn't look at that photo: image understanding (gemini, openrouter fallback) failed: {str(e)[:200]}")
+        return
+    send(chat_id, reply)
+
+def handle_inbox_now(chat_id):
+    s = collectors.get("gmail").summary(days=7)
+    lines = [f"gmail: {s['unread']} unread, {s['recent']} received in the last 7 days."]
+    if s["unread_senders"]:
+        lines.append("unread from:")
+        lines += [f"• {x['sender']} ({x['count']})" for x in s["unread_senders"]]
+    send(chat_id, "\n".join(lines))
+
+def handle_inbox(chat_id):
+    if not collectors.get("gmail").configured:
+        t = tasks.add_task(chat_id, "check my gmail inbox", status="unavailable",
+                           check={"type": "collector", "name": "gmail", "action": "inbox"},
+                           note="gmail not connected")
+        send(chat_id, "gmail isn't connected yet. paste an app password on the connectors page and i'll pull your inbox. i saved this on my list and ill ping u once it's connected ✅")
+        return
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    try:
+        handle_inbox_now(chat_id)
+    except collectors.CollectorError as e:
+        send(chat_id, str(e))
+
 def do_chat(text, hist=None):
     sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot()
     msgs = [{"role": "system", "content": sysmsg}] + (hist[-HIST_MAX:] if hist else []) + [{"role": "user", "content": text}]
@@ -106,6 +198,15 @@ def run_task(task, announce=None, hist=None):
         if announce: announce()
         handle_report(chat_id, desc)
         return "[sent campaign report]"
+    if action == "image":
+        data = imagegen.generate(check.get("prompt") or desc)  # raises ImageError naming the service
+        if announce: announce()
+        send_photo(chat_id, data, caption=(check.get("prompt") or desc)[:200])
+        return "[sent generated image]"
+    if action == "inbox":
+        if announce: announce()
+        handle_inbox_now(chat_id)
+        return "[sent inbox summary]"
     reply = do_chat(desc, hist)
     if announce: announce()
     send(chat_id, reply)
@@ -254,6 +355,18 @@ def handle_chat(chat_id, text):
         hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent campaign report]"}]
         del hist[:-HIST_MAX]
         return
+    img = re.search(r"\b(generate|create|make|draw|design)\s+(an?\s+|the\s+|me\s+an?\s+)?(image|picture|pic|photo|visual|graphic)s?\b\s*(of|for|with|showing)?", low)
+    if img and reply is None:
+        prompt = re.sub(r"^.*?\b(image|picture|pic|photo|visual|graphic)s?\b\s*(of|for|with|showing)?\s*", "", text, count=1, flags=re.I).strip() or text
+        handle_image(chat_id, prompt)
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[generated image]"}]
+        del hist[:-HIST_MAX]
+        return
+    if re.search(r"\b(gmail|inbox|unread)\b", low) and re.search(r"\b(check|show|pull|summar|what|any|how|read|list|see)\w*", low):
+        handle_inbox(chat_id)
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent inbox summary]"}]
+        del hist[:-HIST_MAX]
+        return
     if re.search(r"\b(script|scripts|hooks?|captions?|ad package)\b", low) and re.search(r"\b(make|generate|create|write|give me)\b", low):
         reply = ("send me these 3, separated by |:\nproduct | audience | platform\n\nexample:\nNOISE earbuds | young Lagos commuters | tiktok")
     parts = [p.strip() for p in text.split("|")]
@@ -280,9 +393,12 @@ def handle_update(u):
     msg = u.get("message") or {}
     chat = msg.get("chat") or {}
     if chat.get("type") != "private": return
-    chat_id, text = chat["id"], (msg.get("text") or "").strip()
-    if not text: return
+    chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
+    if not text and not msg.get("photo"): return
     try:
+        if msg.get("photo"):
+            handle_photo(chat_id, msg, text)
+            return
         if text.startswith("/start"):
             send(chat_id, "👑 ROYCE AI online.\n\n/script product | audience | platform — full ad package\n/addlead Name | Business | Contact\n/leads — view leads\n/report — summary\n\n/tasks: what's on my list\n\nor just talk to me normally.")
         elif text.startswith("/script "): handle_script(chat_id, text[8:])
@@ -297,6 +413,7 @@ def handle_update(u):
             s = db.summary()
             send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
         elif text == "/tasks": handle_tasks(chat_id)
+        elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)
     except Exception as e:

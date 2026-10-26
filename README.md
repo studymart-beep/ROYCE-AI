@@ -54,3 +54,19 @@ Work you give Royce in chat ("make...", "find...", "pull...") is written to a ta
 - /tasks lists your tasks with status.
 
 The task store lives in `app/tasks.py`, and the bot loop in `app/telegram_bot.py` runs the retry check.
+
+## More connectors (gmail, facebook, x, instagram, linkedin)
+
+Gmail (read-only, live): paste an app password and your gmail address on the connectors page. Create the app password at Google Account > Security > 2-Step Verification > App passwords. Royce logs in over IMAP (imap.gmail.com) and counts recent and unread mail and lists the most frequent unread senders. Ask in chat ("check my gmail inbox") or use the inbox summary. Gmail is an inbox connector, not an ad platform, so it is never used for campaign reports.
+
+Facebook, X, Instagram, LinkedIn: the token is stored and the row shows connected. Live insights are coming soon, so these connectors pull no data and never return made-up numbers. Pasting a token now means the insights step only needs the code later.
+
+Connectors that need tokens from you: Gmail app password; Facebook Page or Meta Graph token; X API bearer token; Instagram Graph API token; LinkedIn API token.
+
+## Image understanding and generation
+
+Understanding: send a photo to the bot. Royce downloads it through Telegram getFile and sends it to Gemini vision (image_url parts on the same OpenAI-compatible endpoint, with OpenRouter as failover). With no caption it describes the image. With a caption it uses the photo for the request, for example "make an ad like this".
+
+Generation: /image <prompt>, or chat such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
+
+Tests: the task store is covered by a quick check (add, complete, unavailable lookups). The retry path was run against a stubbed connector before commit.
