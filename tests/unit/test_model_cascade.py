@@ -55,7 +55,7 @@ def test_env_list_is_parsed_in_order_trimmed_and_deduped(monkeypatch):
 def test_default_cascade_when_env_unset(monkeypatch):
     monkeypatch.delenv("GEMINI_MODELS", raising=False)
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
-    assert config.gemini_models() == ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"]
+    assert config.gemini_models() == ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
 
 def test_single_model_env_becomes_first_entry(monkeypatch):
@@ -71,7 +71,7 @@ def test_single_model_env_already_listed_is_not_duplicated(monkeypatch):
 def test_blank_env_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("GEMINI_MODELS", " , ")
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
-    assert config.gemini_models()[0] == "gemini-2.5-flash"
+    assert config.gemini_models()[0] == "gemini-3.1-flash-lite"
 
 
 def test_parse_model_list_handles_none_and_empty():

@@ -7,7 +7,7 @@ SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
 # Gemini model cascade, tried in order on retryable errors (429/503/timeout/network) before
 # the router fails over to the next provider. Override with GEMINI_MODELS (comma-separated).
 # GEMINI_MODEL, when set, is always the first entry.
-GEMINI_MODELS_DEFAULT = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"]
+GEMINI_MODELS_DEFAULT = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
 
 def parse_model_list(raw):
