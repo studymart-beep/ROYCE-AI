@@ -92,3 +92,19 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 | Interface split | implemented | app/telegram_bot.py, app/main.py, app/static/mobile.html, app/static/workspace.html | AI chat lives in the desktop app and the PWA (/workspace, /m). Telegram private chat is ops only: owner ops commands, and a pointer for everyone else. The old telegram mini app pages and their /api routes were removed. The menu button is reset to default at bot start (setChatMenuButton). Test: tests/unit/test_bot_ops_only.py. |
 | Honest limits | documented | README.md, /help | the bot api cannot read the owner's private chats with others. The bot sees only its own private chats and groups it is a member of. |
 | Live group test | not run | none | no test group was available. The live check covered the bot start, the allowed_updates list and the poller only. |
+
+## Chief of Staff (coordinator bot)
+
+| Item | Status | Where | Notes |
+|---|---|---|---|
+| Chief of Staff bot | implemented | app/bots.py (ensure_coordinator, COORDINATOR), skills/coordinator.md | seeded once, pinned first, cannot be deleted or created by hand, not in the Make-a-bot picker (6 specialist templates). |
+| Routing and delegation | implemented | app/chief.py (run, parse_routing, _route_prompt) | one routing call returns JSON {bot, instruction, needs_approval} or {steps:[up to 3]}. "self" answers directly. Malformed or unsafe routing (unknown bot, loop, empty, non-bool flag) falls back to a direct chief answer and is audited. |
+| Specialist persona | implemented | app/chief.py (_specialist_call) | the specialist's own skill playbook is the system prompt, the refined instruction is the user message. Prior step output is passed forward. |
+| Hop and step limits | implemented | app/chief.py (MAX_HOPS=2, 3 steps) | at most 2 specialist calls per request. A third step is reported as skipped_hop_limit. No recursion: a specialist cannot route. |
+| Budget and failover | implemented | app/llm.py chat_text, app/agent/budget.py | every routing and specialist call goes through the shared provider router and the shared hourly budget. BudgetExceeded stops the chain. |
+| Approval gate | implemented | app/chief.py | needs_approval=true returns the plan (awaiting_approval) and runs nothing. |
+| Audit | implemented | app/agent/audit.py | rows hold bot ids and the task pair, never message or reply content. |
+| API | implemented | app/workspace_api.py | GET /api/ws/bots/chief (creates if missing), GET /api/ws/bots lists the chief first, POST /api/ws/chat takes bot_id (404 for unknown bot). Delegations are returned and stored as meta on the assistant message. |
+| Workspace UI | implemented | app/static/workspace.js, workspace.css | Bots page pins the chief with a "coordinates all bots" line and a css crown overlay on mascot.png (logo file untouched). Sessions has a bot selector defaulting to the chief. "delegated to [bot]" line from real response metadata. |
+| Limits | documented | this section | a delegation is one model call per step, not a background task. Plans are not persisted. needs_approval has no approve button yet: the plan is shown, not executed. Quality of routing depends on the model. |
+| Browser proof | run | proofs/chief-of-staff.png | local server with a stub LLM (scripts/chief_proof_server.py). The proof shows the delegation line and layout, not real provider output. |

@@ -24,7 +24,7 @@ def test_every_template_is_backed_by_a_real_skill_file():
     for t in bots.templates():
         assert t["key"] in names
         assert skills.get_skill(t["key"])
-    assert len(bots.templates()) == 6
+    assert len(bots.templates()) == 6  # the picker lists the 6 specialist templates; coordinator is reserved
 
 
 def test_bot_create_list_delete(client):
@@ -32,9 +32,10 @@ def test_bot_create_list_delete(client):
     assert r.status_code == 200
     bot = r.json()
     assert bot["name"] == "Ad scripts" and bot["template"] == "direct-response"
-    assert [b["id"] for b in client.get("/api/ws/bots").json()["bots"]] == [bot["id"]]
+    ids = [b["id"] for b in client.get("/api/ws/bots").json()["bots"]]
+    assert ids[1:] == [bot["id"]]  # the Chief of Staff is always seeded and pinned first
     assert client.delete(f"/api/ws/bots/{bot['id']}").status_code == 200
-    assert client.get("/api/ws/bots").json()["bots"] == []
+    assert [b["template"] for b in client.get("/api/ws/bots").json()["bots"]] == ["coordinator"]
     assert client.delete(f"/api/ws/bots/{bot['id']}").status_code == 404
 
 
