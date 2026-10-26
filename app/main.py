@@ -13,6 +13,17 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(BASE, "app", "static")
 app = FastAPI(title="Royce AI")
 
+@app.get("/healthz")
+def healthz(): return {"ok": True}
+
+@app.get("/readyz")
+def readyz():
+    from .agent import router
+    state = router.readiness()
+    ready = any(v["configured"] for v in state.values())
+    body = {"ready": ready, "providers": {k: {"configured": v["configured"], "healthy": v["healthy"]} for k, v in state.items()}}
+    return JSONResponse(body, status_code=200 if ready else 503)
+
 @app.get("/")
 def index(): return FileResponse(os.path.join(STATIC, "index.html"))
 @app.get("/scripts")

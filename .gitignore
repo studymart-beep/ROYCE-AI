@@ -10,3 +10,7 @@ tasks.json
 tasks.json.tmp
 nudge_state.json
 nudge_state.json.tmp
+memory.json
+memory.json.tmp
+approvals.json
+approvals.json.tmp

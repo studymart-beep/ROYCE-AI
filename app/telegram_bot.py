@@ -5,6 +5,7 @@ from . import db, collectors, workstore, tasks
 from . import leadbrain
 from . import skills
 from .style import VOICE_RULES, sanitize
+from .agent import budget, memory, approvals, permissions
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -205,8 +206,16 @@ def handle_inbox(chat_id):
     except collectors.CollectorError as e:
         send(chat_id, str(e))
 
-def do_chat(text, hist=None):
-    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + skills.skill_block(text)
+def memory_block(text, chat_id=None):
+    try:
+        return memory.block(text, chat_id=chat_id)
+    except Exception as e:
+        print(f"[bot] memory lookup failed: {e}", flush=True)
+        return ""
+
+def do_chat(text, hist=None, chat_id=None):
+    mem = memory_block(text, chat_id)
+    sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text)
     msgs = [{"role": "system", "content": sysmsg}] + (hist[-HIST_MAX:] if hist else []) + [{"role": "user", "content": text}]
     return chat_text(msgs, timeout=40)
 
@@ -228,7 +237,7 @@ def run_task(task, announce=None, hist=None):
         if announce: announce()
         handle_inbox_now(chat_id)
         return "[sent inbox summary]"
-    reply = do_chat(desc, hist)
+    reply = do_chat(desc, hist, chat_id=chat_id)
     if announce: announce()
     send(chat_id, reply)
     return reply
@@ -247,6 +256,9 @@ def run_new_task(chat_id, text, action, needs=None, summary="", hist=None):
     send(chat_id, "on it, added to my list. ill ping u when its done")
     try:
         reply = run_task(t, hist=hist)
+    except budget.BudgetExceeded:
+        tasks.complete_task(t["id"], note="stopped: hourly ai budget reached")
+        raise
     except Exception as e:
         reason = str(e)[:300] or e.__class__.__name__
         check["attempts"] = 1
@@ -429,7 +441,8 @@ def handle_chat(chat_id, text):
             hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
             del hist[:-HIST_MAX]
             return
-        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + skills.skill_block(text)
+        mem = memory_block(text, chat_id)
+        sysmsg = SYSTEM_PROMPT + "\n\n" + crm_snapshot() + ("\n\n" + mem if mem else "") + skills.skill_block(text)
         reply = chat_text([{"role": "system", "content": sysmsg}] + hist[-HIST_MAX:] + [{"role": "user", "content": text}], timeout=40)
     hist += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
     del hist[:-HIST_MAX]
@@ -528,12 +541,45 @@ def handle_content_chat(chat_id, client):
     send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
 
 
+def handle_approve(chat_id, arg):
+    rid = (arg or "").strip().lstrip("#")
+    if not rid:
+        items = approvals.pending(chat_id)
+        if not items:
+            send(chat_id, "nothing waiting for approval.")
+            return
+        lines = [f"#{r['id']} {r['action_class']}: {r.get('summary') or ''}".strip() for r in items]
+        send(chat_id, "waiting for your approval:\n" + "\n".join(lines) + "\n\nsend /approve <id> to run one.")
+        return
+    ok, msg = approvals.approve(chat_id, rid)
+    send(chat_id, msg)
+
+def remember_facts(chat_id, text):
+    try:
+        saved = memory.learn(text, chat_id=chat_id)
+        if saved:
+            print(f"[bot] saved memory: {saved}", flush=True)
+    except Exception as e:
+        print(f"[bot] memory save failed: {e}", flush=True)
+
 def handle_update(u):
     msg = u.get("message") or {}
     chat = msg.get("chat") or {}
     if chat.get("type") != "private": return
     chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
     if not text and not msg.get("photo"): return
+    token = budget.bind(chat_id)
+    try:
+        return _handle_update_bound(u, msg, chat, chat_id, text)
+    except budget.BudgetExceeded as e:
+        try: send(chat_id, str(e))
+        except Exception: pass
+    finally:
+        budget.unbind(token)
+
+def _handle_update_bound(u, msg, chat, chat_id, text):
+    if text and not text.startswith("/"):
+        remember_facts(chat_id, text)
     try:
         leadbrain.remember_chat(chat_id)
     except Exception as e:
@@ -560,10 +606,13 @@ def handle_update(u):
         elif text == "/doctor" or text.startswith("/doctor "): handle_doctor(chat_id, text[7:])
         elif text == "/content" or text.startswith("/content "): handle_content(chat_id, text[8:])
         elif text == "/skills": handle_skills(chat_id)
+        elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
         elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)
+    except budget.BudgetExceeded:
+        raise
     except Exception as e:
         print(f"[bot] error handling update: {e}", flush=True)
         try: send(chat_id, "something broke on my side, try again")
