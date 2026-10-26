@@ -17,3 +17,5 @@ approvals.json.tmp
 logs/
 backups/
 health.json
+conversations.json
+chat_tasks.json

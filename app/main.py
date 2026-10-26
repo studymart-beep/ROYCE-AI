@@ -32,6 +32,8 @@ def scripts_page(): return FileResponse(os.path.join(STATIC, "scripts.html"))
 def crm_page(): return FileResponse(os.path.join(STATIC, "crm.html"))
 @app.get("/reporting")
 def reporting_page(): return FileResponse(os.path.join(STATIC, "reporting.html"))
+@app.get("/workspace")
+def workspace_page(): return FileResponse(os.path.join(STATIC, "workspace.html"))
 @app.get("/connectors")
 def connectors_page(): return FileResponse(os.path.join(STATIC, "connectors.html"))
 
@@ -153,5 +155,8 @@ def api_gmail_summary(days: int = 7):
         return collectors.get("gmail").summary(days=max(1, min(days, 60)))
     except collectors.CollectorError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+from .workspace_api import router as workspace_router
+app.include_router(workspace_router)
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

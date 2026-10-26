@@ -303,3 +303,11 @@ def summary(rec):
     else:
         head = f"step {done + 1} of {total} running."
     return head + "\n" + "\n".join(lines)
+
+
+def all_plans():
+    """Every planner task, newest first. Copies only (used by the workspace task list)."""
+    with _LOCK:
+        d = _load()
+        return sorted([json.loads(json.dumps(r)) for r in d.values()], key=lambda r: r.get("created_at", 0), reverse=True)
+

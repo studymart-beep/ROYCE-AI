@@ -92,3 +92,15 @@ def reject(chat_id, rid):
         rec["status"] = "rejected"
         _save(d)
         return True
+
+
+def all_records():
+    """Every approval record, newest first (workspace view). Copies only."""
+    d = _load()
+    return sorted([dict(r) for r in d.values()], key=lambda r: r.get("created_at", 0), reverse=True)
+
+
+def get(rid):
+    rec = _load().get(rid)
+    return dict(rec) if rec else None
+
