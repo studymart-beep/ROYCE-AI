@@ -58,7 +58,7 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
 
 - Desktop interface: implemented as a browser workspace at /workspace (sidebar with conversations, real chat through /api/ws/chat, planner task panel with polling, approvals with approve/reject, tasks, memory with forget, connections and provider/budget status, settings). Runs on the existing FastAPI server and shares the bot's modules (chatplan, approvals, memory, budget, audit). Gated by WORKSPACE_TOKEN. Status: implemented, tested at the API level.
 - Installable app: implemented as a PWA (manifest plus service worker that caches only the static shell). Installed from Chrome or Edge on Windows via Install app.
-- Native Windows executable: not built. No Electron or packaged desktop app. The desktop experience is the installed PWA window.
+- Native Windows executable: the Tauri desktop app (desktop/) is the native path. Linux-verified (native build compiled; window loaded the production /workspace under Xvfb). Windows .msi/.exe installer: pending the user's build on Windows (bundling is Windows-only). The installed PWA window remains available.
 
 ## Phase 4 extension: mobile PWA, desktop client, deployment prep (status)
 
@@ -66,8 +66,10 @@ None of items 1 to 21 are blocked on a missing external account. Item 16 is bloc
   and static checks. Not tested on a real phone here.
 - Service worker at /sw.js: cache-first for the shell only, network-only for /api, offline page at
   /offline. Implemented, tested for scope and cache rules.
-- Desktop Tauri v2 client (desktop/). Config and wiring validated as JSON and paths. Windows exe/msi
-  NOT built (requires Windows).
+- Desktop Tauri v2 client (desktop/). Linux-verified: native build (cargo tauri build --no-bundle)
+  with ROYCE_BACKEND_URL defaulting to https://royce-ai.onrender.com, and the window loaded the
+  production /workspace under Xvfb. Windows .msi/.exe installer: pending the user's build on Windows
+  (bundling is Windows-only; no .exe exists yet). Steps: desktop/README.md.
 - Persistence: ROYCE_DATA_DIR (app/paths.py). Implemented.
 - CORS: ALLOWED_ORIGINS (main.py). Implemented, tested for allowed and disallowed origins.
 - Deployment: render.yaml added. NOTHING DEPLOYED.
