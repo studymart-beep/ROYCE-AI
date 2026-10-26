@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D3B2E">
+<title>Royce AI, offline</title>
+<style>
+  :root{--ivory:#F7F3E9;--forest:#0D3B2E;--orange:#F36B21;--gold:#C9A24B;--ink:#1B211E;--muted:#6B716C}
+  html,body{height:100%;margin:0;background:var(--ivory);color:var(--ink);font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}
+  main{max-width:420px;text-align:center}
+  .mark{width:64px;height:64px;margin:0 auto 18px;display:block}
+  h1{color:var(--forest);font-size:24px;margin:0 0 8px;font-weight:600}
+  p{margin:0 0 14px;color:var(--ink)}
+  .muted{color:var(--muted);font-size:15px}
+  button{min-height:48px;padding:0 22px;border:0;border-radius:10px;background:var(--orange);color:#fff;font:inherit;font-weight:600;font-size:16px}
+  .rule{width:48px;height:3px;background:var(--gold);border-radius:2px;margin:12px auto 18px}
+</style>
+</head>
+<body>
+<main>
+  <svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0D3B2E"/><path d="M150 362 L362 150 M200 150 H362 V312" stroke="#C9A24B" stroke-width="44" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>you're offline</h1>
+  <div class="rule"></div>
+  <p>Royce AI needs a connection to answer. Nothing was sent, and no reply was made up while you're offline.</p>
+  <p class="muted">Reconnect and your chats, tasks and approvals will load again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

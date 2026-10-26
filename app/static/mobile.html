@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D3B2E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Royce AI">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/mobile.css">
+<title>Royce AI</title>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="/static/icon-192.png" alt="" width="28" height="28"><span id="screenTitle">Chats</span></div>
+  <div class="conn" id="conn" aria-live="polite"><span class="dot"></span><span id="connText">checking</span></div>
+</header>
+
+<div class="banner" id="offlineBanner" hidden>you're offline. AI needs a connection.</div>
+
+<main id="screens">
+  <section class="screen" data-screen="chats" id="scr-chats">
+    <div class="pad">
+      <div class="row-actions">
+        <input id="convSearch" class="search" type="search" placeholder="search chats" aria-label="search chats" maxlength="200">
+        <button type="button" class="btn-ghost" id="newChat">new</button>
+      </div>
+      <div id="convList" class="list"></div>
+      <p class="empty" id="convEmpty" hidden>no chats yet. tap new or send a message below.</p>
+    </div>
+  </section>
+
+  <section class="screen chat" data-screen="chat" id="scr-chat" hidden>
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+  </section>
+
+  <section class="screen" data-screen="tasks" id="scr-tasks" hidden>
+    <div class="pad">
+      <h2>tasks</h2>
+      <div id="taskList" class="list"></div>
+      <p class="empty" id="taskEmpty" hidden>no tasks yet. multi-step asks show up here.</p>
+    </div>
+  </section>
+
+  <section class="screen" data-screen="approvals" id="scr-approvals" hidden>
+    <div class="pad">
+      <h2>approvals</h2>
+      <div id="apprList" class="list"></div>
+      <p class="empty" id="apprEmpty" hidden>nothing waiting on you.</p>
+    </div>
+  </section>
+
+  <section class="screen" data-screen="more" id="scr-more" hidden>
+    <div class="pad">
+      <h2>provider</h2>
+      <div class="card" id="providerCard"><p class="muted">loading provider status</p></div>
+
+      <h2>memory</h2>
+      <div class="row-actions">
+        <input id="memSearch" class="search" type="search" placeholder="search memory" aria-label="search memory" maxlength="200">
+      </div>
+      <div id="memList" class="list"></div>
+      <p class="empty" id="memEmpty" hidden>no memory saved.</p>
+
+      <h2>settings</h2>
+      <div class="field">
+        <label for="tokenInput">owner token</label>
+        <input id="tokenInput" type="password" autocomplete="off" placeholder="paste owner token" aria-describedby="tokenHelp">
+        <p class="muted" id="tokenHelp">stored only on this phone (localStorage), sent as a request header. never shipped in the app.</p>
+      </div>
+      <div class="row-actions">
+        <button type="button" class="btn-primary" id="saveToken">save token</button>
+        <button type="button" class="btn-ghost" id="forgetToken">forget token</button>
+      </div>
+      <p class="muted"><a href="/workspace">open the desktop workspace</a></p>
+    </div>
+  </section>
+</main>
+
+<div class="composer-wrap" id="composerWrap">
+  <form class="composer" id="composer" autocomplete="off">
+    <textarea id="input" rows="1" maxlength="4000" placeholder="message royce" aria-label="message" enterkeyhint="send"></textarea>
+    <button type="submit" class="btn-primary send" id="send" aria-label="send">send</button>
+  </form>
+</div>
+
+<nav class="tabbar" aria-label="main">
+  <button type="button" class="tab" data-tab="chats" aria-selected="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"/></svg><span>chats</span></button>
+  <button type="button" class="tab" data-tab="tasks" aria-selected="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 9l2 2 4-4M9 16h6"/></svg><span>tasks</span></button>
+  <button type="button" class="tab" data-tab="approvals" aria-selected="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg><span>approvals</span><b class="badge" id="apprBadge" hidden>0</b></button>
+  <button type="button" class="tab" data-tab="more" aria-selected="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg><span>more</span></button>
+</nav>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="/static/mobile.js"></script>
+</body>
+</html>
