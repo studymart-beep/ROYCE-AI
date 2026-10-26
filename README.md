@@ -192,3 +192,7 @@ Deletions and flags are audited by count and id only, never by content.
 Channels: the bot stores channel posts (text, and edits) the same way as groups, with the channel title as the name.
 Telegram only sends a bot the channel posts it can see, so channel history is only readable from the time the bot
 was added as an admin. Earlier posts cannot be read.
+
+Owner sends: in your private chat with the bot, say "tell the group <name>: <text>" or "post to the channel <name>: <text>".
+The bot shows the exact text and waits for /approve <id>. Only the owner can queue or approve. Nothing is posted until you approve,
+and the audit log records the target id and outcome, never the text.

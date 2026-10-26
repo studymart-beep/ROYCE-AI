@@ -298,6 +298,11 @@ def handle_group_update(msg, edited, send, api, owner_id=None, now=None):
     gid = chat["id"]
     sender = msg.get("from") or {}
     uid = sender.get("id")
+    if chat.get("title") or chat.get("type"):
+        try:
+            tgstore.set_chat_info(gid, chat.get("title") or chat.get("username") or "", chat.get("type") or "")
+        except Exception as e:
+            print(f"[bot] chat info failed: {e}", flush=True)
     text_now = (msg.get("text") or "").strip()
     # commands are not conversation: never store them, so /search and /recap do not index bot traffic
     if not (text_now.startswith("/") and not edited):

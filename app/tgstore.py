@@ -37,7 +37,9 @@ CREATE INDEX IF NOT EXISTS idx_gm_group_ts ON group_messages (group_id, ts);
 CREATE TABLE IF NOT EXISTS group_meta (
     group_id INTEGER PRIMARY KEY,
     retention_hours INTEGER NOT NULL,
-    first_seen REAL NOT NULL
+    first_seen REAL NOT NULL,
+    title TEXT,
+    chat_type TEXT
 );
 """
 
@@ -48,6 +50,12 @@ def _connect(path=None):
     con = sqlite3.connect(path, timeout=10)
     con.row_factory = sqlite3.Row
     con.executescript(_SCHEMA)
+    # migrate stores created before title/chat_type existed (idempotent)
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(group_meta)").fetchall()}
+    for col in ("title", "chat_type"):
+        if col not in cols:
+            con.execute(f"ALTER TABLE group_meta ADD COLUMN {col} TEXT")
+    con.commit()
     return con
 
 
@@ -178,6 +186,27 @@ def groups_with_sender(sender_id, path=None):
     try:
         rows = con.execute("SELECT DISTINCT group_id FROM group_messages WHERE sender_id=?", (sender_id,)).fetchall()
         return [r[0] for r in rows]
+    finally:
+        con.close()
+
+
+def set_chat_info(group_id, title, chat_type, path=None):
+    """Record the chat's real title and type (from the update's chat object)."""
+    con = _connect(path)
+    try:
+        _ensure_group(con, group_id, time.time())
+        con.execute("UPDATE group_meta SET title=?, chat_type=? WHERE group_id=?", (title, chat_type, group_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def known_chats(path=None):
+    """(group_id, title, chat_type) for every chat the store has seen."""
+    con = _connect(path)
+    try:
+        rows = con.execute("SELECT group_id, title, chat_type FROM group_meta").fetchall()
+        return [(r["group_id"], r["title"] or "", r["chat_type"] or "") for r in rows]
     finally:
         con.close()
 

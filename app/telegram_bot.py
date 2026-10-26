@@ -72,6 +72,14 @@ def download_photo(msg):
     mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
     return data, mime
 
+def _send_into(chat_id, text):
+    """Owner-approved post into a group or channel. Returns the telegram response."""
+    return api("sendMessage", chat_id=chat_id, text=text)
+
+from . import tgsend as _tgsend_boot
+_tgsend_boot.set_sender(_send_into)
+
+
 def send(chat_id, text):
     text = sanitize(text or "") or "(empty)"
     while text:
@@ -626,6 +634,16 @@ def handle_update(u):
     if chat.get("type") != "private": return
     if edited: return  # private edits were ignored before; keep it that way
     from . import tggroups as _tg
+    from . import tgsend as _ts
+    if _ts.parse((msg.get("text") or "")) is not None and (msg.get("from") or {}).get("id") != leadbrain.OWNER_CHAT_ID:
+        send(chat["id"], "only the owner can send into groups or channels from here.")
+        audit.record("user", "group_send_refused", "non_owner", "refused")
+        return
+    if _ts.parse((msg.get("text") or "")) is not None:
+        kind, name, body = _ts.parse(msg["text"])
+        ok, reply = _ts.queue_send(chat["id"], kind, name, body)
+        send(chat["id"], reply)
+        return
     if (msg.get("text") or "").strip().startswith(("/help", "/deletemydata")):
         if _tg.handle_private_command(chat["id"], (msg.get("from") or {}).get("id"), msg["text"].strip(),
                                       lambda cid, t: send(cid, t)):
