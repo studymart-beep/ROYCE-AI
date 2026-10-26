@@ -379,11 +379,29 @@ def handle_report(chat_id, text):
     footer = "\n\n" + "\n".join(f"{e['collector']}: {e['error']}" for e in errors) if errors else ""
     send(chat_id, narrative + "\n\n" + table + footer)
 
+def handle_multi_step(chat_id, text):
+    """Planner path for explicit multi-step asks. Returns True if it handled the message."""
+    from .agent import chatplan
+    if not chatplan.looks_multi_step(text):
+        return False
+    task_id, reason = chatplan.start(chat_id, text, chat_fn=lambda msgs: chat_text(msgs, temperature=0, timeout=20))
+    if task_id is None:
+        send(chat_id, sanitize("i couldn't put that into safe steps: " + reason + ". try asking one step at a time."))
+        return True
+    send(chat_id, f"on it, {len(chatplan.get(task_id)['steps'])} steps. i'll tell you as each one finishes.")
+    rec = chatplan.run(task_id)
+    send(chat_id, sanitize(chatplan.summary(rec)))
+    return True
+
 def handle_chat(chat_id, text):
     hist = CHAT_HIST.setdefault(chat_id, [])
     api("sendChatAction", chat_id=chat_id, action="typing")
     low = text.lower()
     reply = None
+    if handle_multi_step(chat_id, text):
+        hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[ran multi-step task]"}]
+        del hist[:-HIST_MAX]
+        return
     if any(w in low for w in REPORT_WORDS) and any(w in low for w in ("report", "performance", "how", "pull", "show", "give", "result", "doing")):
         handle_report(chat_id, text)
         hist += [{"role": "user", "content": text}, {"role": "assistant", "content": "[sent campaign report]"}]
@@ -541,6 +559,18 @@ def handle_content_chat(chat_id, client):
     send(chat_id, f"for a 7-day plan for {client} i need the industry and platform too. send:\n/content {client} | <industry> | <platform>\nexample: /content {client} | skincare | instagram")
 
 
+def handle_deny(chat_id, arg):
+    from .agent import chatplan
+    rid = (arg or "").strip().lstrip("#")
+    if not rid:
+        send(chat_id, "send /deny <task id> to stop a waiting task.")
+        return
+    rec = chatplan.get(rid)
+    if not rec or rec.get("chat_id") != chat_id or rec.get("status") != "waiting_approval":
+        send(chat_id, f"no task waiting for approval with id {rid}.")
+        return
+    send(chat_id, sanitize(chatplan.summary(chatplan.resolve_approval(rid, approved=False))))
+
 def handle_approve(chat_id, arg):
     rid = (arg or "").strip().lstrip("#")
     if not rid:
@@ -550,6 +580,11 @@ def handle_approve(chat_id, arg):
             return
         lines = [f"#{r['id']} {r['action_class']}: {r.get('summary') or ''}".strip() for r in items]
         send(chat_id, "waiting for your approval:\n" + "\n".join(lines) + "\n\nsend /approve <id> to run one.")
+        return
+    from .agent import chatplan
+    waiting = chatplan.task_for_approval(rid, chat_id)
+    if waiting:
+        send(chat_id, sanitize(chatplan.summary(chatplan.resolve_approval(waiting, approved=True))))
         return
     ok, msg = approvals.approve(chat_id, rid)
     send(chat_id, msg)
@@ -608,6 +643,7 @@ def _handle_update_bound(u, msg, chat, chat_id, text):
         elif text == "/skills": handle_skills(chat_id)
         elif text == "/health": send(chat_id, jobs.format_status())
         elif text == "/approve" or text.startswith("/approve "): handle_approve(chat_id, text[8:])
+        elif text == "/deny" or text.startswith("/deny "): handle_deny(chat_id, text[5:])
         elif text == "/voice" or text.startswith("/voice "): handle_voice(chat_id, text[6:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
