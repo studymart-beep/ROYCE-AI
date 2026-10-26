@@ -400,3 +400,33 @@ def test_groupconfig_admin_view(paths):
     tggroups.handle_group_update(msg, False, sent_into(store), Api(status="administrator"), owner_id=999)
     assert "retention: 720h" in store[-1][1]
     assert "welcomes: on" in store[-1][1] or "welcomes: off" in store[-1][1]
+
+
+# channels
+
+def test_channel_post_stored_with_channel_title_and_recap_search_work(paths, monkeypatch):
+    store = []
+    api = Api()
+    base = {"chat": {"id": -1005, "type": "channel", "title": "Royce Updates"}, "message_id": 7, "date": 1000}
+    tggroups.handle_group_update(dict(base, text="new drop friday"), False, sent_into(store), api, owner_id=999)
+    rows = tgstore.search(-1005, "drop", path=paths["store"])
+    assert len(rows) == 1 and rows[0]["sender_name"] == "Royce Updates"
+    # edits update the same post in place
+    tggroups.handle_group_update(dict(base, text="new drop saturday"), True, sent_into(store), api, owner_id=999)
+    rows = tgstore.search(-1005, "saturday", path=paths["store"])
+    assert len(rows) == 1 and rows[0]["edited"] == 1
+    assert tgstore.count(-1005, path=paths["store"]) == 1
+
+
+def test_channel_post_no_user_exemption_lookup(paths):
+    api = Api()
+    base = {"chat": {"id": -1005, "type": "channel", "title": "C"}, "message_id": 9, "date": 1000,
+            "text": "buy now at http://1.2.3.4/x"}
+    tggroups.handle_group_update(base, False, sent_into([]), api, owner_id=999)
+    assert not any(m == "getChatMember" for m, _ in api.calls)  # no fake sender, no admin lookup
+    assert tgmod.list_flags(path=paths["flags"])  # link checks still run on channel posts
+
+
+def test_channel_is_group_type():
+    assert tggroups.is_group({"type": "channel"})
+    assert not tggroups.is_group({"type": "private"})

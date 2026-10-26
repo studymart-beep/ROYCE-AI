@@ -92,7 +92,7 @@ def get_updates(offset=None):
     if offset: url += f"&offset={offset}"
     # message carries group text and new_chat_members (a field of a message, not its own update type);
     # edited_message carries edits of group text
-    url += "&allowed_updates=" + urllib.parse.quote(json.dumps(["message", "edited_message"]))
+    url += "&allowed_updates=" + urllib.parse.quote(json.dumps(["message", "edited_message", "channel_post", "edited_channel_post"]))
     with urllib.request.urlopen(url, timeout=70) as r:
         return json.loads(r.read())
 
@@ -617,8 +617,8 @@ def handle_group_update(msg, chat, edited):
 
 def handle_update(u):
     # edited_message carries edits of earlier messages; treat them as the same message id
-    edited = "edited_message" in u
-    msg = u.get("message") or u.get("edited_message") or {}
+    edited = "edited_message" in u or "edited_channel_post" in u
+    msg = u.get("message") or u.get("edited_message") or u.get("channel_post") or u.get("edited_channel_post") or {}
     chat = msg.get("chat") or {}
     from . import tggroups
     if tggroups.is_group(chat):

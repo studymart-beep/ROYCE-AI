@@ -188,3 +188,7 @@ It only sees its own private chats and the groups it is a member of. In groups i
 files or service events. Edits update the stored text. Stored messages expire after the group's retention
 (default 720 hours) and anyone can delete their own stored messages with /deletemydata yes.
 Deletions and flags are audited by count and id only, never by content.
+
+Channels: the bot stores channel posts (text, and edits) the same way as groups, with the channel title as the name.
+Telegram only sends a bot the channel posts it can see, so channel history is only readable from the time the bot
+was added as an admin. Earlier posts cannot be read.

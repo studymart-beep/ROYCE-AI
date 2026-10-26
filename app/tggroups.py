@@ -21,7 +21,7 @@ from .llm import chat_text
 from .style import sanitize
 from .agent import audit
 
-GROUP_TYPES = ("group", "supergroup")
+GROUP_TYPES = ("group", "supergroup", "channel")  # channel posts are stored like group text
 RECAP_DEFAULT_HOURS = 24
 RECAP_MAX_HOURS = 168
 RECAP_MAX_LINES = 300
@@ -53,8 +53,10 @@ def is_group(chat):
     return (chat or {}).get("type") in GROUP_TYPES
 
 
-def _name(user):
+def _name(user, chat=None):
     user = user or {}
+    if not user and chat:  # channel posts have no sender; the channel title is the name
+        return chat.get("title") or chat.get("username") or ""
     return user.get("first_name") or user.get("username") or ""
 
 
@@ -63,11 +65,13 @@ def _store_text(msg, edited):
     if not text:
         return "ignored"
     sender = msg.get("from") or {}
-    return tgstore.save_message(msg["chat"]["id"], msg["message_id"], sender.get("id"), _name(sender),
+    return tgstore.save_message(msg["chat"]["id"], msg["message_id"], sender.get("id"), _name(sender, msg.get("chat")),
                                 text, ts=msg.get("date"), edited=edited)
 
 
 def _exempt(group_id, user_id, api, owner_id):
+    if user_id is None:  # channel posts: no sender, so no user-level exemption
+        return False
     if not PROTECT_ADMINS or user_id is None:
         return False
     if owner_id is not None and user_id == owner_id:
