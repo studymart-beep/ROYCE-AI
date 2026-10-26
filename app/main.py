@@ -66,6 +66,17 @@ async def api_update_lead(lid: int, req: Request):
     d = await req.json()
     return db.update_lead(lid, **d)
 
+@app.get("/api/leads/{lid}/followup")
+def api_lead_followup(lid: int):
+    from .leadbrain import draft_followup
+    lead = db.get_lead(lid)
+    if not lead:
+        return JSONResponse({"error": "lead not found"}, status_code=404)
+    try:
+        return {"lead_id": lid, "draft": draft_followup(lead)}
+    except Exception as e:
+        return JSONResponse({"error": f"drafting failed: {str(e)[:200]}"}, status_code=502)
+
 @app.get("/api/report/summary")
 def api_report_summary(): return db.summary()
 

@@ -70,3 +70,11 @@ Understanding: send a photo to the bot. Royce downloads it through Telegram getF
 Generation: /image <prompt>, or chat such as "generate an image of ...". app/imagegen.py calls OpenRouter with the modalities image and text, default model google/gemini-2.5-flash-image-preview (set IMAGE_MODEL in .env to change it). If the provider fails, Royce tells you which service failed and keeps the request on the task list to retry.
 
 Tests: the task store is covered by a quick check (add, complete, unavailable lookups). The retry path was run against a stubbed connector before commit.
+
+## Lead brain (follow-ups and nudges)
+
+/followup <lead name or id> drafts a warm, short follow-up for that lead (Nigerian professional tone, max 3 sentences) using the lead's business, notes and status, then asks if you want it tweaked. Drafts come from app/leadbrain.py draft_followup(lead, context) through the same LLM failover.
+
+Mini app: each lead row on the leads page has a "draft followup" link that calls GET /api/leads/{id}/followup and shows the draft inline.
+
+Daily nudges: the bot checks at most once an hour. If any open lead has a next_followup due today or overdue, it sends one message listing them with a one-line reason each, at most once per Lagos day. The nudge goes to the last private chat that messaged the bot (falls back to the owner chat id). State lives in nudge_state.json (git-ignored).

@@ -2,6 +2,7 @@ import json, os, re, time, urllib.request, urllib.parse
 from .llm import chat_text, chat_vision, generate_script_package
 from . import imagegen
 from . import db, collectors, workstore, tasks
+from . import leadbrain
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = None
@@ -389,12 +390,30 @@ def handle_chat(chat_id, text):
     del hist[:-HIST_MAX]
     send(chat_id, reply)
 
+def handle_followup(chat_id, arg):
+    arg = (arg or "").strip()
+    if not arg:
+        send(chat_id, "usage: /followup <lead name or id>\nexample: /followup Chidi or /followup 3")
+        return
+    lead = leadbrain.find_lead(arg)
+    if not lead:
+        send(chat_id, f"no lead matches '{arg}'. check /leads for names and ids.")
+        return
+    api("sendChatAction", chat_id=chat_id, action="typing")
+    draft = leadbrain.draft_followup(lead)
+    send(chat_id, f"follow-up for #{lead['id']} {lead['name']}:\n\n{draft}\n\nwant me to tweak it or add a note?")
+
+
 def handle_update(u):
     msg = u.get("message") or {}
     chat = msg.get("chat") or {}
     if chat.get("type") != "private": return
     chat_id, text = chat["id"], (msg.get("text") or msg.get("caption") or "").strip()
     if not text and not msg.get("photo"): return
+    try:
+        leadbrain.remember_chat(chat_id)
+    except Exception as e:
+        print(f"[bot] remember_chat failed: {e}", flush=True)
     try:
         if msg.get("photo"):
             handle_photo(chat_id, msg, text)
@@ -413,6 +432,7 @@ def handle_update(u):
             s = db.summary()
             send(chat_id, f"📊 {s['total']} leads. {json.dumps(s['by_status'])}. {len(s['overdue'])} overdue.")
         elif text == "/tasks": handle_tasks(chat_id)
+        elif text == "/followup" or text.startswith("/followup "): handle_followup(chat_id, text[9:])
         elif text == "/image" or text.startswith("/image "): handle_image(chat_id, text[6:].strip())
         elif text.startswith("/"): send(chat_id, "unknown command, try /start")
         else: handle_chat(chat_id, text)
@@ -443,6 +463,12 @@ def main():
                 retry_unavailable()
             except Exception as e:
                 print(f"[bot] retry check error: {e}", flush=True)
+        try:
+            nudge = leadbrain.run_nudge_check(time.time())
+            if nudge:
+                send(nudge[0], nudge[1])
+        except Exception as e:
+            print(f"[bot] nudge check error: {e}", flush=True)
 
 if __name__ == "__main__":
     main()

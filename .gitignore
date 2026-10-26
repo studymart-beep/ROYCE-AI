@@ -8,3 +8,5 @@ collectors.json
 work.json
 tasks.json
 tasks.json.tmp
+nudge_state.json
+nudge_state.json.tmp

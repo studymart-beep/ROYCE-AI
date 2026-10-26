@@ -99,12 +99,23 @@ else if(page==='crm'){
             <select class=mini onchange="st(${Number(l.id)},this.value)" aria-label="status">
               <option${l.status=='open'?' selected':''}>open</option><option${l.status=='won'?' selected':''}>won</option><option${l.status=='lost'?' selected':''}>lost</option>
             </select>
+            <button class=txt type=button onclick="draftFollowup(${Number(l.id)},this)">draft followup</button>
           </div>
+          <div id=fu-${Number(l.id)} class=msg></div>
         </div>
       </div>`).join('') + `</section>`
     : `<section class=card><div class=empty>no leads yet. tell royce in the chat to add one.</div></section>`);
   });
   window.st = (id,v) => fetch('/api/leads/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:v})}).then(load);
+  window.draftFollowup = async (id, btn) => {
+    const box = document.getElementById('fu-'+id); box.textContent = 'drafting…';
+    btn.disabled = true;
+    try{
+      const r = await fetch(`/api/leads/${id}/followup`); const j = await r.json();
+      box.innerHTML = r.ok ? `<div class=summary>${esc(j.draft)}</div>` : esc(j.error||'could not draft');
+    }catch(e){ box.textContent = 'could not draft, try again'; }
+    btn.disabled = false;
+  };
   load();
 }
 else if(page==='reporting'){
